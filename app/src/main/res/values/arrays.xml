@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="content_types">
+        <item>YouTube</item>
+        <item>Movie / Show</item>
+        <item>Cartoon</item>
+    </string-array>
+
+    <string-array name="heights">
+        <item>Auto</item>
+        <item>216</item>
+        <item>208</item>
+        <item>200</item>
+        <item>192</item>
+        <item>184</item>
+        <item>4:3 Full 320x240</item>
+        <item>4:3 Preserve 288x216</item>
+    </string-array>
+</resources>

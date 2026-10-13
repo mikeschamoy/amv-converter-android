@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0B0D10"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="AMV Converter"
+            android:textColor="#F4F7FA"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Pick a host file, inspect it, then convert in the background."
+            android:textColor="#98A3AF"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/selectButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="SELECT VIDEO" />
+
+        <TextView
+            android:id="@+id/fileText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="No video selected"
+            android:textColor="#98A3AF"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/sourceText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="#15191F"
+            android:padding="14dp"
+            android:text="SOURCE\n—"
+            android:textColor="#F4F7FA"
+            android:textSize="17sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="CONTENT TYPE"
+            android:textColor="#98A3AF"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/typeSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FFFFFF"
+            android:entries="@array/content_types" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="VISIBLE HEIGHT"
+            android:textColor="#98A3AF"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/heightSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FFFFFF"
+            android:entries="@array/heights" />
+
+        <TextView
+            android:id="@+id/presetText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="#10251A"
+            android:padding="14dp"
+            android:text="PRESET\n—"
+            android:textColor="#62D394"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/convertButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:enabled="false"
+            android:text="CHOOSE OUTPUT &amp; CONVERT" />
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Ready."
+            android:textColor="#98A3AF"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="Conversions run as an Android foreground media-processing service, so you can leave the app or turn the screen off. Progress appears in the notification."
+            android:textColor="#98A3AF"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>
