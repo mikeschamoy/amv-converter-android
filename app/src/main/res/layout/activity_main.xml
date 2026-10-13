@@ -9,7 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="18dp">
+        android:padding="16dp">
 
         <TextView
             android:layout_width="match_parent"
@@ -23,7 +23,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Pick a host file, inspect it, then convert in the background."
+            android:text="Inspect • Preview • Convert in the background"
             android:textColor="#98A3AF"
             android:textSize="14sp" />
 
@@ -38,7 +38,7 @@
             android:id="@+id/fileText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
             android:text="No video selected"
             android:textColor="#98A3AF"
             android:textSize="13sp" />
@@ -47,8 +47,8 @@
             android:id="@+id/sourceText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:background="#15191F"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/card"
             android:padding="14dp"
             android:text="SOURCE\n—"
             android:textColor="#F4F7FA"
@@ -62,63 +62,293 @@
             android:textColor="#98A3AF"
             android:textSize="12sp" />
 
-        <Spinner
-            android:id="@+id/typeSpinner"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#FFFFFF"
-            android:entries="@array/content_types" />
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/youtubeButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="YouTube" />
+
+            <Button
+                android:id="@+id/movieButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Movie / Show" />
+
+            <Button
+                android:id="@+id/cartoonButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Cartoon" />
+        </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="16dp"
+            android:text="PLAYER PREVIEW"
+            android:textColor="#98A3AF"
+            android:textSize="12sp" />
+
+        <com.mikeschamoy.amvconverter.PlayerPreviewFrame
+            android:id="@+id/previewFrame"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#000000">
+
+            <com.mikeschamoy.amvconverter.PreviewTextureView
+                android:id="@+id/previewTexture"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <ImageView
+                android:id="@+id/fallbackImage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#000000"
+                android:scaleType="matrix"
+                android:visibility="gone" />
+        </com.mikeschamoy.amvconverter.PlayerPreviewFrame>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/playPreviewButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="▶" />
+
+            <SeekBar
+                android:id="@+id/previewSeek"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:layout_weight="1"
+                android:max="1000" />
+
+            <TextView
+                android:id="@+id/previewTime"
+                android:layout_width="58dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="0:00"
+                android:textColor="#98A3AF" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/playerViewButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="PLAYER VIEW" />
+
+            <Button
+                android:id="@+id/rawViewButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="RAW AMV" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:text="VISIBLE HEIGHT"
             android:textColor="#98A3AF"
             android:textSize="12sp" />
 
-        <Spinner
-            android:id="@+id/heightSpinner"
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#FFFFFF"
-            android:entries="@array/heights" />
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/h216" android:layout_width="72dp" android:layout_height="wrap_content" android:text="216" />
+                <Button android:id="@+id/h208" android:layout_width="72dp" android:layout_height="wrap_content" android:text="208" />
+                <Button android:id="@+id/h200" android:layout_width="72dp" android:layout_height="wrap_content" android:text="200" />
+                <Button android:id="@+id/h192" android:layout_width="72dp" android:layout_height="wrap_content" android:text="192" />
+                <Button android:id="@+id/h184" android:layout_width="72dp" android:layout_height="wrap_content" android:text="184" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <LinearLayout
+            android:id="@+id/fourThreeRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/fourThreeFull"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="4:3 FULL" />
+
+            <Button
+                android:id="@+id/fourThreePreserve"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="4:3 PRESERVE" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/presetText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:background="#10251A"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/card_green"
             android:padding="14dp"
             android:text="PRESET\n—"
             android:textColor="#62D394"
-            android:textSize="18sp"
+            android:textSize="16sp"
             android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/detectBarsButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="DETECT BLACK BARS" />
+
+            <Button
+                android:id="@+id/clearCropButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="CLEAR CROP" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/cropText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No detected crop."
+            android:textColor="#98A3AF"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="TRIM (optional)"
+            android:textColor="#98A3AF"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/startTrim"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Start 0:00"
+                android:inputType="text"
+                android:textColor="#F4F7FA"
+                android:textColorHint="#68727E" />
+
+            <EditText
+                android:id="@+id/endTrim"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="End (optional)"
+                android:inputType="text"
+                android:textColor="#F4F7FA"
+                android:textColorHint="#68727E" />
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/testClip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="30-second test clip"
+            android:textColor="#F4F7FA" />
+
+        <TextView
+            android:id="@+id/estimateText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/card"
+            android:padding="12dp"
+            android:text="ESTIMATE\n—"
+            android:textColor="#F4F7FA"
+            android:textSize="14sp" />
 
         <Button
             android:id="@+id/convertButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="16dp"
             android:enabled="false"
             android:text="CHOOSE OUTPUT &amp; CONVERT" />
+
+        <Button
+            android:id="@+id/cancelButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:text="CANCEL CONVERSION" />
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="18dp"
+            android:layout_marginTop="10dp"
+            android:max="100"
+            android:progress="0" />
 
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:text="Ready."
             android:textColor="#98A3AF"
             android:textSize="13sp" />
 
         <TextView
+            android:id="@+id/historyText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
-            android:text="Conversions run as an Android foreground media-processing service, so you can leave the app or turn the screen off. Progress appears in the notification."
+            android:background="@drawable/card"
+            android:padding="12dp"
+            android:text="RECENT\nNo conversions yet."
             android:textColor="#98A3AF"
             android:textSize="12sp" />
+
     </LinearLayout>
 </ScrollView>
