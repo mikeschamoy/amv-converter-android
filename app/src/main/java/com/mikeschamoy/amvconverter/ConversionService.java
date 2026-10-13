@@ -80,7 +80,7 @@ public class ConversionService extends Service {
         }, log -> {
             // Keep logs available to FFmpegKit session history; no UI spam.
         }, stats -> {
-            long t = stats.getTime();
+            long t = (long) stats.getTime();
             int pct = durationMs > 0 ? (int) Math.min(99, (t * 100L) / durationMs) : 0;
             String text = pct > 0 ? "Converting… " + pct + "%" : "Converting…";
             updateNotification(pct, text);
