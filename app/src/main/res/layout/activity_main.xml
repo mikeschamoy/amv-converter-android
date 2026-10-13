@@ -2,353 +2,137 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0B0D10"
+    android:background="@color/bg"
     android:fillViewport="true">
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="AMV Converter"
-            android:textColor="#F4F7FA"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Inspect • Preview • Convert in the background"
-            android:textColor="#98A3AF"
-            android:textSize="14sp" />
-
-        <Button
-            android:id="@+id/selectButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="SELECT VIDEO" />
-
-        <TextView
-            android:id="@+id/fileText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="No video selected"
-            android:textColor="#98A3AF"
-            android:textSize="13sp" />
-
-        <TextView
-            android:id="@+id/sourceText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:background="@drawable/card"
-            android:padding="14dp"
-            android:text="SOURCE\n—"
-            android:textColor="#F4F7FA"
-            android:textSize="17sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="CONTENT TYPE"
-            android:textColor="#98A3AF"
-            android:textSize="12sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/youtubeButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="YouTube" />
-
-            <Button
-                android:id="@+id/movieButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Movie / Show" />
-
-            <Button
-                android:id="@+id/cartoonButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Cartoon" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+            <ImageView android:layout_width="54dp" android:layout_height="54dp" android:src="@drawable/clipamv_logo" android:contentDescription="ClipAMV logo"/>
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="ClipAMV" android:textColor="@color/text" android:textSize="28sp" android:textStyle="bold"/>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Your Media, Player-Ready" android:textColor="@color/green" android:textSize="13sp"/>
+            </LinearLayout>
+            <TextView android:id="@+id/stateBadge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/card_green" android:padding="8dp" android:text="READY" android:textColor="@color/green" android:textStyle="bold"/>
         </LinearLayout>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="PLAYER PREVIEW"
-            android:textColor="#98A3AF"
-            android:textSize="12sp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:orientation="horizontal">
+            <Button android:id="@+id/selectButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_primary" android:text="SELECT FILE" android:textColor="@color/text"/>
+            <Button android:id="@+id/selectQueueButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:background="@drawable/button_selector" android:text="SELECT QUEUE" android:textColor="@color/text"/>
+        </LinearLayout>
 
+        <TextView android:id="@+id/fileText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="No media selected" android:textColor="@color/muted"/>
+        <TextView android:id="@+id/sourceText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="14dp" android:text="SOURCE\n—" android:textColor="@color/text"/>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="CONTENT" android:textColor="@color/muted" android:textSize="11sp"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/youtubeButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="YouTube" android:textColor="@color/text"/>
+            <Button android:id="@+id/movieButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="Movie" android:textColor="@color/text"/>
+            <Button android:id="@+id/cartoonButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="Cartoon" android:textColor="@color/text"/>
+            <Button android:id="@+id/portraitButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="Portrait" android:textColor="@color/text"/>
+        </LinearLayout>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="MODE" android:textColor="@color/muted" android:textSize="11sp"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/spaceSaverButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="SPACE SAVER" android:textColor="@color/text"/>
+            <Button android:id="@+id/standardButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="STANDARD" android:textColor="@color/text"/>
+            <Button android:id="@+id/qualityButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="QUALITY" android:textColor="@color/text"/>
+        </LinearLayout>
+
+        <TextView android:id="@+id/reasonText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Auto recommendation will appear here." android:textColor="@color/muted" android:textSize="12sp"/>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="PLAYER PREVIEW" android:textColor="@color/muted" android:textSize="11sp"/>
         <com.mikeschamoy.amvconverter.PlayerPreviewFrame
             android:id="@+id/previewFrame"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#000000">
-
             <com.mikeschamoy.amvconverter.PreviewTextureView
                 android:id="@+id/previewTexture"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-
+                android:layout_height="match_parent"/>
             <ImageView
                 android:id="@+id/fallbackImage"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="#000000"
-                android:scaleType="matrix"
-                android:visibility="gone" />
+                android:scaleType="fitCenter"
+                android:visibility="gone"/>
         </com.mikeschamoy.amvconverter.PlayerPreviewFrame>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/playPreviewButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="▶" />
-
-            <SeekBar
-                android:id="@+id/previewSeek"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:layout_weight="1"
-                android:max="1000" />
-
-            <TextView
-                android:id="@+id/previewTime"
-                android:layout_width="58dp"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:text="0:00"
-                android:textColor="#98A3AF" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+            <Button android:id="@+id/playPreviewButton" android:layout_width="56dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="▶" android:textColor="@color/text"/>
+            <SeekBar android:id="@+id/previewSeek" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="1000"/>
+            <TextView android:id="@+id/previewTime" android:layout_width="58dp" android:layout_height="wrap_content" android:gravity="center" android:text="0:00" android:textColor="@color/muted"/>
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/playerViewButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="PLAYER VIEW" android:textColor="@color/text"/>
+            <Button android:id="@+id/rawViewButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="RAW AMV" android:textColor="@color/text"/>
+            <Button android:id="@+id/refreshPreviewButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="REFRESH" android:textColor="@color/text"/>
         </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/playerViewButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="PLAYER VIEW" />
-
-            <Button
-                android:id="@+id/rawViewButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="RAW AMV" />
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="VISIBLE HEIGHT"
-            android:textColor="#98A3AF"
-            android:textSize="12sp" />
-
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <Button android:id="@+id/h216" android:layout_width="72dp" android:layout_height="wrap_content" android:text="216" />
-                <Button android:id="@+id/h208" android:layout_width="72dp" android:layout_height="wrap_content" android:text="208" />
-                <Button android:id="@+id/h200" android:layout_width="72dp" android:layout_height="wrap_content" android:text="200" />
-                <Button android:id="@+id/h192" android:layout_width="72dp" android:layout_height="wrap_content" android:text="192" />
-                <Button android:id="@+id/h184" android:layout_width="72dp" android:layout_height="wrap_content" android:text="184" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="FRAME" android:textColor="@color/muted" android:textSize="11sp"/>
+        <HorizontalScrollView android:id="@+id/frameScroller" android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/h216" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="216" android:textColor="@color/text"/>
+                <Button android:id="@+id/h208" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="208" android:textColor="@color/text"/>
+                <Button android:id="@+id/h200" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="200" android:textColor="@color/text"/>
+                <Button android:id="@+id/h192" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="192" android:textColor="@color/text"/>
+                <Button android:id="@+id/h184" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="184" android:textColor="@color/text"/>
             </LinearLayout>
         </HorizontalScrollView>
 
-        <LinearLayout
-            android:id="@+id/fourThreeRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:visibility="gone">
-
-            <Button
-                android:id="@+id/fourThreeFull"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="4:3 FULL" />
-
-            <Button
-                android:id="@+id/fourThreePreserve"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="4:3 PRESERVE" />
+        <LinearLayout android:id="@+id/fourThreeRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone">
+            <Button android:id="@+id/fourThreeFull" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="4:3 FULL" android:textColor="@color/text"/>
+            <Button android:id="@+id/fourThreePreserve" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="4:3 PRESERVE" android:textColor="@color/text"/>
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/presetText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/card_green"
-            android:padding="14dp"
-            android:text="PRESET\n—"
-            android:textColor="#62D394"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/detectBarsButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="DETECT BLACK BARS" />
-
-            <Button
-                android:id="@+id/clearCropButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="CLEAR CROP" />
+        <LinearLayout android:id="@+id/portraitRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone">
+            <Button android:id="@+id/portraitFit" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="FIT" android:textColor="@color/text"/>
+            <Button android:id="@+id/portraitZoom" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="ZOOM" android:textColor="@color/text"/>
+            <Button android:id="@+id/portraitRotate" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="ROTATE 90°" android:textColor="@color/text"/>
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/cropText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="No detected crop."
-            android:textColor="#98A3AF"
-            android:textSize="12sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="TRIM (optional)"
-            android:textColor="#98A3AF"
-            android:textSize="12sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <EditText
-                android:id="@+id/startTrim"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="Start 0:00"
-                android:inputType="text"
-                android:textColor="#F4F7FA"
-                android:textColorHint="#68727E" />
-
-            <EditText
-                android:id="@+id/endTrim"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="End (optional)"
-                android:inputType="text"
-                android:textColor="#F4F7FA"
-                android:textColorHint="#68727E" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="FPS" android:textColor="@color/muted" android:textSize="11sp"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/fps15" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="15" android:textColor="@color/text"/>
+            <Button android:id="@+id/fps25" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="25" android:textColor="@color/text"/>
+            <Button android:id="@+id/fps30" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="30" android:textColor="@color/text"/>
+            <Button android:id="@+id/fpsAuto" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="AUTO" android:textColor="@color/text"/>
         </LinearLayout>
 
-        <CheckBox
-            android:id="@+id/testClip"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="30-second test clip"
-            android:textColor="#F4F7FA" />
+        <TextView android:id="@+id/outputNameText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/card_green" android:fontFamily="monospace" android:padding="12dp" android:text="OUTPUT\n—" android:textColor="@color/green"/>
 
-        <TextView
-            android:id="@+id/estimateText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/card"
-            android:padding="12dp"
-            android:text="ESTIMATE\n—"
-            android:textColor="#F4F7FA"
-            android:textSize="14sp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
+            <Button android:id="@+id/detectBarsButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="DETECT BARS" android:textColor="@color/text"/>
+            <Button android:id="@+id/clearCropButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="CLEAR CROP" android:textColor="@color/text"/>
+        </LinearLayout>
+        <TextView android:id="@+id/cropText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="No detected crop." android:textColor="@color/muted" android:textSize="12sp"/>
 
-        <Button
-            android:id="@+id/convertButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:enabled="false"
-            android:text="CHOOSE OUTPUT &amp; CONVERT" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="TRIM" android:textColor="@color/muted" android:textSize="11sp"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <EditText android:id="@+id/startTrim" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="Start 0:00" android:inputType="text" android:textColor="@color/text" android:textColorHint="@color/muted"/>
+            <EditText android:id="@+id/endTrim" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="End" android:inputType="text" android:textColor="@color/text" android:textColorHint="@color/muted"/>
+        </LinearLayout>
+        <CheckBox android:id="@+id/testClip" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="30-second test clip" android:textColor="@color/text"/>
 
-        <Button
-            android:id="@+id/cancelButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            android:text="CANCEL CONVERSION" />
+        <TextView android:id="@+id/estimateText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="12dp" android:text="STORAGE\n—" android:textColor="@color/text"/>
 
-        <ProgressBar
-            android:id="@+id/progressBar"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="18dp"
-            android:layout_marginTop="10dp"
-            android:max="100"
-            android:progress="0" />
+        <Button android:id="@+id/advancedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/button_selector" android:text="ADVANCED ▾" android:textColor="@color/text"/>
+        <LinearLayout android:id="@+id/advancedPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/card" android:orientation="vertical" android:padding="12dp" android:visibility="gone">
+            <TextView android:id="@+id/presetText" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="monospace" android:text="—" android:textColor="@color/green" android:textSize="12sp"/>
+            <Button android:id="@+id/exportDiagnosticsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="EXPORT DIAGNOSTICS" android:textColor="@color/text"/>
+            <Button android:id="@+id/resetDefaultsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="RESTORE DEFAULTS" android:textColor="@color/text"/>
+        </LinearLayout>
 
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Ready."
-            android:textColor="#98A3AF"
-            android:textSize="13sp" />
-
-        <TextView
-            android:id="@+id/historyText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:background="@drawable/card"
-            android:padding="12dp"
-            android:text="RECENT\nNo conversions yet."
-            android:textColor="#98A3AF"
-            android:textSize="12sp" />
-
+        <Button android:id="@+id/convertButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/button_primary" android:enabled="false" android:text="CONVERT TO AMV" android:textColor="@color/text"/>
+        <Button android:id="@+id/startQueueButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_primary" android:enabled="false" android:text="CHOOSE OUTPUT FOLDER &amp; START QUEUE" android:textColor="@color/text" android:visibility="gone"/>
+        <Button android:id="@+id/cancelButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_selector" android:text="CANCEL" android:textColor="@color/red" android:visibility="gone"/>
+        <ProgressBar android:id="@+id/progressBar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="18dp" android:layout_marginTop="10dp" android:max="100" android:progress="0"/>
+        <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Ready." android:textColor="@color/muted"/>
+        <TextView android:id="@+id/historyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="12dp" android:text="RECENT\nNo conversions yet." android:textColor="@color/muted" android:textSize="12sp"/>
     </LinearLayout>
 </ScrollView>
