@@ -43,7 +43,7 @@ public final class PresetEngine {
         if(mode==Mode.SPACE_SAVER)auto=15;
         p.outputFps=fpsOverride>0?fpsOverride:auto;
         p.blockSize=p.outputFps==15?1470:p.outputFps==30?735:882;
-        if(mode==Mode.SPACE_SAVER){p.q=5;p.qmin=5;}
+        if(mode==Mode.SPACE_SAVER){p.q=3;p.qmin=3;}
         else if(mode==Mode.QUALITY){p.q=1;p.qmin=1;}
 
         boolean crop43=crop!=null&&Math.abs(crop.ratio()-4.0/3.0)<0.05;
@@ -109,7 +109,7 @@ public final class PresetEngine {
     }
 
     public static String buildVideoCommand(String in,String out,Preset p,double start,double end,boolean test){
-        StringBuilder c=new StringBuilder("-y ");
+        StringBuilder c=new StringBuilder("-y -fflags +genpts ");
         if(start>0)c.append("-ss ").append(fmt(start)).append(" ");
         c.append("-i ").append(q(in)).append(" ");
         if(test)c.append("-t 30 ");
@@ -117,7 +117,7 @@ public final class PresetEngine {
         c.append("-vf ").append(q(p.filter)).append(" -map 0:v:0 -map 0:a:0? -sn ");
         c.append("-r ").append(p.outputFps).append(" -c:v amv ");
         if(p.q>0)c.append("-q:v ").append(p.q).append(" -qmin ").append(p.qmin).append(" ");
-        c.append("-c:a adpcm_ima_amv -ac 1 -ar 22050 -block_size ").append(p.blockSize).append(" ");
+        c.append("-c:a adpcm_ima_amv -ac 1 -ar 22050 -block_size ").append(p.blockSize).append(" -avoid_negative_ts make_zero ");
         c.append(q(out));return c.toString();
     }
 
@@ -128,9 +128,14 @@ public final class PresetEngine {
     public static long estimateBytes(SourceInfo s,Preset p,double runtime){
         if(s.image)return 350_000L;
         double base=1.45*(p.outputFps/25.0);
-        double factor=p.mode==Mode.SPACE_SAVER?0.62:p.mode==Mode.QUALITY?1.35:1.0;
+        double qualityFactor=p.mode==Mode.SPACE_SAVER?0.68:p.mode==Mode.QUALITY?1.35:1.0;
+        double framingFactor=1.0;
+        if(!p.fourThree && p.visibleHeight>0){
+            double ratio=Math.max(0.70,Math.min(1.0,p.visibleHeight/216.0));
+            framingFactor=0.82+0.18*ratio;
+        }
         double audio=s.audioPresent?0.088:0;
-        return (long)(runtime*((base*factor+audio)*1_000_000.0/8.0));
+        return (long)(runtime*((base*qualityFactor*framingFactor+audio)*1_000_000.0/8.0));
     }
 
     public static String explain(SourceInfo s,Type type,Preset p){

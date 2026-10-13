@@ -25,6 +25,17 @@
         </LinearLayout>
 
         <TextView android:id="@+id/fileText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="No media selected" android:textColor="@color/muted"/>
+        <LinearLayout android:id="@+id/queuePanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/card" android:orientation="vertical" android:padding="10dp" android:visibility="gone">
+            <TextView android:id="@+id/queueHeader" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="QUEUE" android:textColor="@color/green" android:textStyle="bold"/>
+            <LinearLayout android:id="@+id/queueList" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"/>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="QUEUE SETTINGS" android:textColor="@color/muted" android:textSize="11sp"/>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/queueAutoButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="AUTO EACH FILE" android:textColor="@color/text"/>
+                <Button android:id="@+id/queueSameButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="SAME FOR ALL" android:textColor="@color/text"/>
+            </LinearLayout>
+            <Button android:id="@+id/queueDownloadsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_primary" android:text="START QUEUE → DOWNLOADS" android:textColor="@color/text"/>
+            <Button android:id="@+id/queueFolderButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="CHOOSE ANOTHER FOLDER" android:textColor="@color/text"/>
+        </LinearLayout>
         <TextView android:id="@+id/sourceText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="14dp" android:text="SOURCE\n—" android:textColor="@color/text"/>
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="CONTENT" android:textColor="@color/muted" android:textSize="11sp"/>

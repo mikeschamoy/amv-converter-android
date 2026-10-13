@@ -2,12 +2,14 @@ package com.mikeschamoy.amvconverter;
 
 import android.app.*;
 import android.content.*;
+import android.content.ContentValues;
 import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.*;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
+import android.provider.MediaStore;
 
 import com.arthenica.ffmpegkit.*;
 
@@ -22,7 +24,7 @@ public class ConversionService extends Service {
     public static final String EXTRA_INPUT="input",EXTRA_INPUTS="inputs",EXTRA_OUTPUT="output",EXTRA_TREE="tree";
     public static final String EXTRA_TYPE="type",EXTRA_MODE="mode",EXTRA_HEIGHT="height",EXTRA_FPS="fps";
     public static final String EXTRA_43="f43",EXTRA_PORTRAIT="portrait",EXTRA_AUTOBARS="autobars";
-    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test";
+    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test",EXTRA_DOWNLOADS="downloads",EXTRA_QUEUE_AUTO="queueAuto";
 
     private static final String CHANNEL="conversion";
     private static final int NOTIFY_ID=100;
@@ -64,6 +66,8 @@ public class ConversionService extends Service {
         boolean autoBars=intent.getBooleanExtra(EXTRA_AUTOBARS,true);
         double start=intent.getDoubleExtra(EXTRA_START,0),end=intent.getDoubleExtra(EXTRA_END,0);
         boolean test=intent.getBooleanExtra(EXTRA_TEST,false);
+        boolean downloads=intent.getBooleanExtra(EXTRA_DOWNLOADS,false);
+        boolean queueAuto=intent.getBooleanExtra(EXTRA_QUEUE_AUTO,false);
 
         int total=inputs.size(),fail=0;
         for(int i=0;i<total&&!cancelRequested;i++){
@@ -75,11 +79,15 @@ public class ConversionService extends Service {
             if(info==null){fail++;addHistory("✕ "+original+" — inspect failed");continue;}
 
             PresetEngine.Crop crop=autoBars&&!info.image?detectBars(in,info):null;
-            PresetEngine.Preset preset=PresetEngine.choose(info,type,mode,height,fps,preserve43,portrait,crop);
+            PresetEngine.Type itemType=queueAuto&&info.isPortrait()?PresetEngine.Type.PORTRAIT:type;
+            int itemHeight=queueAuto?0:height;
+            int itemFps=queueAuto?0:fps;
+            PresetEngine.Preset preset=PresetEngine.choose(info,itemType,mode,itemHeight,itemFps,preserve43,portrait,crop);
 
-            String outName=FileNameCleaner.clean(original,type,info.image);
+            String outName=FileNameCleaner.clean(original,itemType,info.image);
             Uri out;
             if(total==1&&singleOut!=null)out=Uri.parse(singleOut);
+            else if(downloads)out=createInDownloads(outName,info.image);
             else out=createInTree(Uri.parse(tree),outName,info.image);
 
             if(out==null){fail++;addHistory("✕ "+outName+" — output create failed");continue;}
@@ -89,8 +97,11 @@ public class ConversionService extends Service {
             if(!ok){fail++;continue;}
 
             boolean verified=verify(out,info.image,runtime);
+            boolean seekOk=info.image || verifySeek(out,runtime);
             long bytes=querySize(out);
-            addHistory((verified?"✓ ":"⚠ ")+outName+" — "+human(bytes)+(verified?"":" verify warning"));
+            String mark=verified&&seekOk?"✓ ":"⚠ ";
+            String note=!verified?" verify warning":(!seekOk?" seek warning":" • seek OK");
+            addHistory(mark+outName+" — "+human(bytes)+note);
         }
 
         String msg=cancelRequested?"Cancelled":fail==0?"Complete":"Complete • "+fail+" failed";
@@ -186,6 +197,49 @@ public class ConversionService extends Service {
             return Math.abs(d-expected)<Math.max(5,expected*0.03);
         }
         return true;
+    }
+
+    private boolean verifySeek(Uri out,double duration){
+        if(duration<20)return true;
+        String saf=FFmpegKitConfig.getSafParameterForRead(this,out);
+        double[] points={0.25,0.50,0.75};
+        for(double f:points){
+            double ss=Math.max(0,duration*f);
+            FFmpegSession s=FFmpegKit.execute("-v error -ss "+fmt(ss)+" -i "+q(saf)+" -frames:v 1 -an -f null -");
+            if(!ReturnCode.isSuccess(s.getReturnCode()))return false;
+        }
+        return true;
+    }
+
+    private Uri createInDownloads(String name,boolean image){
+        if(Build.VERSION.SDK_INT<29)return null;
+        try{
+            name=uniqueDownloadName(name);
+            ContentValues v=new ContentValues();
+            v.put(MediaStore.Downloads.DISPLAY_NAME,name);
+            v.put(MediaStore.Downloads.MIME_TYPE,image?"image/jpeg":"application/octet-stream");
+            if(Build.VERSION.SDK_INT>=29)v.put(MediaStore.Downloads.IS_PENDING,0);
+            return getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,v);
+        }catch(Exception e){return null;}
+    }
+
+    private String uniqueDownloadName(String name){
+        if(Build.VERSION.SDK_INT<29)return name;
+        String ext=name.toLowerCase(Locale.US).endsWith(".jpg")?".jpg":".amv";
+        String base=name.substring(0,Math.max(0,name.length()-ext.length()));
+        String candidate=name; int n=2;
+        while(downloadNameExists(candidate)&&n<100){
+            String suffix="-"+n++;
+            int max=Math.max(1,16-suffix.length());
+            candidate=base.substring(0,Math.min(max,base.length()))+suffix+ext;
+        }
+        return candidate;
+    }
+    private boolean downloadNameExists(String name){
+        if(Build.VERSION.SDK_INT<29)return false;
+        try(Cursor c=getContentResolver().query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,new String[]{MediaStore.Downloads._ID},MediaStore.Downloads.DISPLAY_NAME+"=?",new String[]{name},null)){
+            return c!=null&&c.moveToFirst();
+        }catch(Exception e){return false;}
     }
 
     private Uri createInTree(Uri tree,String name,boolean image){

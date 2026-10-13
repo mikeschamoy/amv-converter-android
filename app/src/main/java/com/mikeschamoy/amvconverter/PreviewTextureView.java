@@ -12,7 +12,8 @@ public class PreviewTextureView extends TextureView implements TextureView.Surfa
     private boolean playerView=true;private int sourceW,sourceH;
     public PreviewTextureView(Context c,AttributeSet a){super(c,a);setSurfaceTextureListener(this);}
     public void setListener(Listener l){listener=l;}
-    public void setVideo(Uri u){uri=u;if(isAvailable())prepare();}
+    public void setVideo(Uri u){uri=u;setTransform(new Matrix());if(isAvailable())prepare();}
+    public void clearSource(){uri=null;release();setTransform(new Matrix());}
     public void setPreset(PresetEngine.Preset p,boolean pv){preset=p;playerView=pv;apply();}
     public void toggle(){if(player==null)return;if(player.isPlaying())player.pause();else player.start();}
     public boolean isPlaying(){return player!=null&&player.isPlaying();}
