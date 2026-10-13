@@ -53,6 +53,12 @@
             <Button android:id="@+id/qualityButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="QUALITY" android:textColor="@color/text"/>
         </LinearLayout>
 
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="PERFORMANCE" android:textColor="@color/muted" android:textSize="11sp"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/perfStandardButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="STANDARD" android:textColor="@color/text"/>
+            <Button android:id="@+id/perfFasterButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="FASTER" android:textColor="@color/text"/>
+            <Button android:id="@+id/perfMaximumButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="MAXIMUM" android:textColor="@color/text"/>
+        </LinearLayout>
         <TextView android:id="@+id/reasonText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Auto recommendation will appear here." android:textColor="@color/muted" android:textSize="12sp"/>
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="PLAYER PREVIEW" android:textColor="@color/muted" android:textSize="11sp"/>
@@ -144,6 +150,7 @@
         <Button android:id="@+id/cancelButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_selector" android:text="CANCEL" android:textColor="@color/red" android:visibility="gone"/>
         <ProgressBar android:id="@+id/progressBar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="18dp" android:layout_marginTop="10dp" android:max="100" android:progress="0"/>
         <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Ready." android:textColor="@color/muted"/>
+        <TextView android:id="@+id/telemetryText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Speed: — • CPU: Standard • Thermal: — • Battery: —" android:textColor="@color/green" android:fontFamily="monospace" android:textSize="12sp"/>
         <TextView android:id="@+id/historyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="12dp" android:text="RECENT\nNo conversions yet." android:textColor="@color/muted" android:textSize="12sp"/>
     </LinearLayout>
 </ScrollView>

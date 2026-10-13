@@ -109,13 +109,18 @@ public final class PresetEngine {
     }
 
     public static String buildVideoCommand(String in,String out,Preset p,double start,double end,boolean test){
+        return buildVideoCommand(in,out,p,start,end,test,0);
+    }
+    public static String buildVideoCommand(String in,String out,Preset p,double start,double end,boolean test,int performance){
         StringBuilder c=new StringBuilder("-y -fflags +genpts ");
+        if(performance>0)c.append("-filter_threads 0 ");
         if(start>0)c.append("-ss ").append(fmt(start)).append(" ");
         c.append("-i ").append(q(in)).append(" ");
         if(test)c.append("-t 30 ");
         else if(end>start&&end>0)c.append("-t ").append(fmt(end-start)).append(" ");
         c.append("-vf ").append(q(p.filter)).append(" -map 0:v:0 -map 0:a:0? -sn ");
         c.append("-r ").append(p.outputFps).append(" -c:v amv ");
+        if(performance>0)c.append("-threads 0 ");
         if(p.q>0)c.append("-q:v ").append(p.q).append(" -qmin ").append(p.qmin).append(" ");
         c.append("-c:a adpcm_ima_amv -ac 1 -ar 22050 -block_size ").append(p.blockSize).append(" -avoid_negative_ts make_zero ");
         c.append(q(out));return c.toString();

@@ -33,15 +33,16 @@ public class MainActivity extends Activity {
     private PresetEngine.Mode mode=PresetEngine.Mode.STANDARD;
     private PresetEngine.PortraitMode portraitMode=PresetEngine.PortraitMode.FIT;
     private int heightOverride=0,fpsOverride=0;
-    private boolean preserve43=false,playerView=true,advanced=false,queueAuto=true,usingProxy=false,generatingProxy=false;
+    private boolean preserve43=false,playerView=true,advanced=false,queueAuto=true,usingProxy=false,generatingProxy=false,conversionActive=false;
+    private int performanceMode=0;
     private PresetEngine.Crop crop;
     private String latestDiagnostics="ClipAMV diagnostics unavailable.";
     private long sourceGeneration=0,queueGeneration=0;
     private double proxyBaseSeconds=0,pendingPreviewSeek=-1;
 
-    private TextView stateBadge,fileText,sourceText,reasonText,outputNameText,cropText,estimateText,presetText,statusText,historyText,previewTime,queueHeader;
+    private TextView stateBadge,fileText,sourceText,reasonText,outputNameText,cropText,estimateText,presetText,statusText,historyText,previewTime,queueHeader,telemetryText;
     private LinearLayout queuePanel,queueList;
-    private Button youtubeButton,movieButton,cartoonButton,portraitButton,spaceSaverButton,standardButton,qualityButton;
+    private Button youtubeButton,movieButton,cartoonButton,portraitButton,spaceSaverButton,standardButton,qualityButton,perfStandardButton,perfFasterButton,perfMaximumButton;
     private Button[] heightButtons,fpsButtons;
     private Button full43,preserve43Button,portraitFit,portraitZoom,portraitRotate,playerViewButton,rawViewButton;
     private Button convertButton,startQueueButton,cancelButton,advancedButton,playPreviewButton,queueAutoButton,queueSameButton,queueDownloadsButton,queueFolderButton;
@@ -71,7 +72,14 @@ public class MainActivity extends Activity {
             progress.setProgress(p);
             String msg=i.getStringExtra("msg");
             statusText.setText(msg==null?"":msg);
+            String telemetry=i.getStringExtra("telemetry");
+            if(telemetry!=null)telemetryText.setText(telemetry);
             boolean done=i.getBooleanExtra("done",false);
+            if(done){
+                conversionActive=false;
+                convertButton.setEnabled(inputUri!=null&&source!=null&&queuePanel.getVisibility()!=View.VISIBLE);
+                queueDownloadsButton.setEnabled(true);queueFolderButton.setEnabled(true);
+            }
             cancelButton.setVisibility(done?View.GONE:View.VISIBLE);
             stateBadge.setText(done?"READY":"CONVERTING");
             if(done)loadHistory();
@@ -81,11 +89,12 @@ public class MainActivity extends Activity {
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
         setContentView(R.layout.activity_main);
+        performanceMode=Math.max(0,Math.min(2,getSharedPreferences("state",MODE_PRIVATE).getInt("performance",0)));
         bind(); setupUi(); setupPreview(); selfTest();
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},9);
         if(getSharedPreferences("state",MODE_PRIVATE).getBoolean("jobActive",false))
-            statusText.setText("A previous conversion was interrupted. Verify the output before retrying.");
+            statusText.setText("Conversion running in background. See notification for progress.");
         handler.post(seekUpdater);
     }
 
@@ -94,6 +103,10 @@ public class MainActivity extends Activity {
         reasonText=findViewById(R.id.reasonText); outputNameText=findViewById(R.id.outputNameText); cropText=findViewById(R.id.cropText);
         estimateText=findViewById(R.id.estimateText); presetText=findViewById(R.id.presetText); statusText=findViewById(R.id.statusText);
         historyText=findViewById(R.id.historyText); previewTime=findViewById(R.id.previewTime);
+        telemetryText=findViewById(R.id.telemetryText);
+        perfStandardButton=findViewById(R.id.perfStandardButton);
+        perfFasterButton=findViewById(R.id.perfFasterButton);
+        perfMaximumButton=findViewById(R.id.perfMaximumButton);
         queuePanel=findViewById(R.id.queuePanel); queueList=findViewById(R.id.queueList); queueHeader=findViewById(R.id.queueHeader);
         queueAutoButton=findViewById(R.id.queueAutoButton); queueSameButton=findViewById(R.id.queueSameButton);
         queueDownloadsButton=findViewById(R.id.queueDownloadsButton); queueFolderButton=findViewById(R.id.queueFolderButton);
@@ -121,6 +134,9 @@ public class MainActivity extends Activity {
         spaceSaverButton.setOnClickListener(v->{mode=PresetEngine.Mode.SPACE_SAVER;fpsOverride=0;refresh();});
         standardButton.setOnClickListener(v->{mode=PresetEngine.Mode.STANDARD;fpsOverride=0;refresh();});
         qualityButton.setOnClickListener(v->{mode=PresetEngine.Mode.QUALITY;fpsOverride=0;refresh();});
+        perfStandardButton.setOnClickListener(v->setPerformance(0));
+        perfFasterButton.setOnClickListener(v->setPerformance(1));
+        perfMaximumButton.setOnClickListener(v->setPerformance(2));
 
         int[] hs={216,208,200,192,184};
         for(int i=0;i<heightButtons.length;i++){final int h=hs[i];heightButtons[i].setOnClickListener(v->{heightOverride=h;refresh();});}
@@ -186,12 +202,14 @@ public class MainActivity extends Activity {
     }
 
     private void pickOne(){
+        if(conversionActive)return;
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*");
         i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"video/*","image/jpeg","image/png","video/x-matroska","video/x-msvideo","application/octet-stream"});
         startActivityForResult(i,PICK_ONE);
     }
 
     private void pickQueue(){
+        if(conversionActive)return;
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
         i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"video/*","image/jpeg","image/png","video/x-matroska","video/x-msvideo","application/octet-stream"});
         startActivityForResult(i,PICK_QUEUE);
@@ -239,7 +257,7 @@ public class MainActivity extends Activity {
         new Thread(()->{
             PresetEngine.SourceInfo first=null;
             for(int i=0;i<queueUris.size();i++){
-                if(gen!=queueGeneration)return;
+                if(gen!=queueGeneration||conversionActive)return;
                 Uri u=queueUris.get(i); PresetEngine.SourceInfo info=probe(u);
                 if(info!=null){synchronized(queueInfo){queueInfo.put(u.toString(),info);}}
                 PresetEngine.SourceInfo finalFirst=first;
@@ -280,6 +298,7 @@ public class MainActivity extends Activity {
     }
 
     private void inspect(Uri uri,boolean fromQueue){
+        if(conversionActive)return;
         long gen=++sourceGeneration; inputUri=uri; resetPreviewState(); crop=null; stateBadge.setText("INSPECTING");
         convertButton.setEnabled(false); statusText.setText("Inspecting source…");
         new Thread(()->{
@@ -323,7 +342,7 @@ public class MainActivity extends Activity {
     }
 
     private void refreshPreviewSource(){
-        if(inputUri==null||source==null)return;
+        if(conversionActive||inputUri==null||source==null)return;
         fallback.setVisibility(View.GONE); preview.setVisibility(View.VISIBLE);
         if(source.image){extractFrameAt(0);return;}
         if(usingProxy)generateRawProxy();
@@ -331,7 +350,7 @@ public class MainActivity extends Activity {
     }
 
     private void generateRawProxy(){
-        if(inputUri==null||source==null||source.image||generatingProxy)return;
+        if(conversionActive||inputUri==null||source==null||source.image||generatingProxy)return;
         final long gen=sourceGeneration; generatingProxy=true; stateBadge.setText("PREVIEW"); statusText.setText("Building compatibility preview…");
         String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); double ss=Math.max(0,currentPreviewSeconds());
         File out=new File(getCacheDir(),"clipamv_proxy_"+gen+".mp4");
@@ -346,7 +365,7 @@ public class MainActivity extends Activity {
     }
 
     private void extractFrameAt(double sec){
-        if(inputUri==null||source==null)return;
+        if(conversionActive||inputUri==null||source==null)return;
         final long gen=sourceGeneration; String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); File out=new File(getCacheDir(),"clipamv_frame_"+gen+".jpg");
         String cmd="-y "+(!source.image?"-ss "+f3(sec)+" ":"")+"-i "+q(saf)+" -frames:v 1 -vf "+q(preset().filter)+" -q:v 2 "+q(out.getAbsolutePath());
         FFmpegKit.executeAsync(cmd,session->runOnUiThread(()->{
@@ -359,7 +378,7 @@ public class MainActivity extends Activity {
     private double currentPreviewSeconds(){double s=parseTime(startTrim.getText().toString());return s>0?s:(source==null?0:Math.max(0,Math.min(source.durationSeconds/2,source.durationSeconds-1)));}
 
     private void detectBars(){
-        if(inputUri==null||source==null||source.image)return; final long gen=sourceGeneration; statusText.setText("Detecting black bars…");
+        if(conversionActive||inputUri==null||source==null||source.image)return; final long gen=sourceGeneration; statusText.setText("Detecting black bars…");
         double ss=Math.max(0,source.durationSeconds/2-4); String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); final StringBuilder logs=new StringBuilder();
         FFmpegKit.executeAsync("-ss "+f3(ss)+" -i "+q(saf)+" -t 8 -vf cropdetect=24:16:0 -an -f null -",done->runOnUiThread(()->{
             if(gen!=sourceGeneration)return; Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(logs.toString()); PresetEngine.Crop last=null;
@@ -405,6 +424,7 @@ public class MainActivity extends Activity {
     private void style(){
         Button[] content={youtubeButton,movieButton,cartoonButton,portraitButton}; for(Button b:content)b.setSelected(false); content[type.ordinal()].setSelected(true);
         spaceSaverButton.setSelected(mode==PresetEngine.Mode.SPACE_SAVER); standardButton.setSelected(mode==PresetEngine.Mode.STANDARD); qualityButton.setSelected(mode==PresetEngine.Mode.QUALITY);
+        perfStandardButton.setSelected(performanceMode==0);perfFasterButton.setSelected(performanceMode==1);perfMaximumButton.setSelected(performanceMode==2);
         int[] hs={216,208,200,192,184};for(int i=0;i<heightButtons.length;i++)heightButtons[i].setSelected(heightOverride==hs[i]);
         int[] fs={15,25,30,0};for(int i=0;i<fpsButtons.length;i++)fpsButtons[i].setSelected(fpsOverride==fs[i]);
         full43.setSelected(!preserve43);preserve43Button.setSelected(preserve43);portraitFit.setSelected(portraitMode==PresetEngine.PortraitMode.FIT);portraitZoom.setSelected(portraitMode==PresetEngine.PortraitMode.ZOOM);portraitRotate.setSelected(portraitMode==PresetEngine.PortraitMode.ROTATE);
@@ -443,17 +463,33 @@ public class MainActivity extends Activity {
 
     private Intent baseServiceIntent(){
         Intent i=new Intent(this,ConversionService.class); i.putExtra(ConversionService.EXTRA_TYPE,type.ordinal());i.putExtra(ConversionService.EXTRA_MODE,mode.ordinal());
+        i.putExtra(ConversionService.EXTRA_PERFORMANCE,performanceMode);
         i.putExtra(ConversionService.EXTRA_HEIGHT,heightOverride);i.putExtra(ConversionService.EXTRA_FPS,fpsOverride);i.putExtra(ConversionService.EXTRA_43,preserve43);i.putExtra(ConversionService.EXTRA_PORTRAIT,portraitMode.ordinal());i.putExtra(ConversionService.EXTRA_AUTOBARS,true);
         i.putExtra(ConversionService.EXTRA_START,parseTime(startTrim.getText().toString()));i.putExtra(ConversionService.EXTRA_END,parseTime(endTrim.getText().toString()));i.putExtra(ConversionService.EXTRA_TEST,testClip.isChecked());return i;
     }
 
-    private void startServiceCompat(Intent i){if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);stateBadge.setText("CONVERTING");cancelButton.setVisibility(View.VISIBLE);progress.setProgress(0);statusText.setText("Conversion started. Safe to leave app or turn screen off.");}
+    private void startServiceCompat(Intent i){
+        conversionActive=true;queueGeneration++;
+        if(preview.isPlaying())preview.toggle();
+        playPreviewButton.setText("▶");
+        convertButton.setEnabled(false);queueDownloadsButton.setEnabled(false);queueFolderButton.setEnabled(false);
+        if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);
+        stateBadge.setText("CONVERTING");cancelButton.setVisibility(View.VISIBLE);progress.setProgress(0);
+        telemetryText.setText("CPU: "+(performanceMode==2?"Maximum":performanceMode==1?"Faster":"Standard")+" • Checking thermal/battery…");
+        statusText.setText("Conversion started. Safe to leave app or turn screen off.");
+    }
+    private void setPerformance(int p){
+        if(conversionActive)return;
+        performanceMode=p;
+        getSharedPreferences("state",MODE_PRIVATE).edit().putInt("performance",p).apply();
+        style();
+    }
     private void cancel(){Intent i=new Intent(this,ConversionService.class);i.setAction(ConversionService.ACTION_CANCEL);startService(i);}
     private void toggleAdvanced(){advanced=!advanced;findViewById(R.id.advancedPanel).setVisibility(advanced?View.VISIBLE:View.GONE);advancedButton.setText(advanced?"ADVANCED ▴":"ADVANCED ▾");}
-    private void resetDefaults(){mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;queueAuto=true;refresh();}
+    private void resetDefaults(){mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;queueAuto=true;setPerformance(0);refresh();}
 
     private String sourceBlock(PresetEngine.SourceInfo s){return "SOURCE\n"+s.width+"×"+s.height+"\n"+String.format(Locale.US,"%.3f fps",s.fps)+"\n"+String.format(Locale.US,"%.2f:1",s.ratio())+"\n"+(s.image?"IMAGE":fmtTime(s.durationSeconds))+"\nInput: "+human(s.inputBytes);}
-    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.4\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+type+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\n";}
+    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.5\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+type+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\n";}
     private void loadHistory(){String h=getSharedPreferences("history",MODE_PRIVATE).getString("items","");historyText.setText("RECENT\n"+(h.isEmpty()?"No conversions yet.":h));}
     private void takePerm(Uri uri,int flags){int f=flags&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);try{getContentResolver().takePersistableUriPermission(uri,f);}catch(Exception ignored){}}
     private String displayName(Uri uri){try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "media";}
@@ -465,7 +501,14 @@ public class MainActivity extends Activity {
     private static String q(String x){return "\""+x.replace("\"","\\\"")+"\"";}
     private static String f3(double x){return String.format(Locale.US,"%.3f",x);}
 
-    @Override protected void onStart(){super.onStart();IntentFilter f=new IntentFilter(ConversionService.ACTION_PROGRESS);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);loadHistory();}
+    @Override protected void onStart(){
+        super.onStart();
+        conversionActive=getSharedPreferences("state",MODE_PRIVATE).getBoolean("jobActive",false);
+        if(conversionActive){
+            convertButton.setEnabled(false);queueDownloadsButton.setEnabled(false);queueFolderButton.setEnabled(false);
+            if(preview.isPlaying())preview.toggle();
+        }
+        IntentFilter f=new IntentFilter(ConversionService.ACTION_PROGRESS);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);loadHistory();}
     @Override protected void onStop(){try{unregisterReceiver(receiver);}catch(Exception ignored){}super.onStop();}
     @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);preview.release();super.onDestroy();}
 

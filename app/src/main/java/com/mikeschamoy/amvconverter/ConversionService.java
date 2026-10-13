@@ -24,12 +24,14 @@ public class ConversionService extends Service {
     public static final String EXTRA_INPUT="input",EXTRA_INPUTS="inputs",EXTRA_OUTPUT="output",EXTRA_TREE="tree";
     public static final String EXTRA_TYPE="type",EXTRA_MODE="mode",EXTRA_HEIGHT="height",EXTRA_FPS="fps";
     public static final String EXTRA_43="f43",EXTRA_PORTRAIT="portrait",EXTRA_AUTOBARS="autobars";
-    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test",EXTRA_DOWNLOADS="downloads",EXTRA_QUEUE_AUTO="queueAuto";
+    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test",EXTRA_DOWNLOADS="downloads",EXTRA_QUEUE_AUTO="queueAuto",EXTRA_PERFORMANCE="performance";
 
     private static final String CHANNEL="conversion";
     private static final int NOTIFY_ID=100;
     private volatile boolean cancelRequested=false;
     private volatile long currentSessionId=-1;
+    private volatile int performanceMode=0;
+    private volatile long lastProgressUpdateMs=0;
     private PowerManager.WakeLock wakeLock;
 
     @Override public void onCreate(){super.onCreate();createChannel();}
@@ -41,6 +43,9 @@ public class ConversionService extends Service {
             if(currentSessionId>0)FFmpegKit.cancel(currentSessionId);
             return START_NOT_STICKY;
         }
+        cancelRequested=false;
+        performanceMode=Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_PERFORMANCE,0)));
+        lastProgressUpdateMs=0;
         acquireWake();startFg("Preparing…",0);
         getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",true).apply();
         new Thread(()->runJobs(intent)).start();
@@ -69,7 +74,8 @@ public class ConversionService extends Service {
         boolean downloads=intent.getBooleanExtra(EXTRA_DOWNLOADS,false);
         boolean queueAuto=intent.getBooleanExtra(EXTRA_QUEUE_AUTO,false);
 
-        int total=inputs.size(),fail=0;
+        int total=inputs.size(),fail=0,completed=0;
+        String lastName=""; long lastBytes=0,totalBytes=0;
         for(int i=0;i<total&&!cancelRequested;i++){
             Uri in=Uri.parse(inputs.get(i));
             String original=displayName(in);
@@ -99,16 +105,30 @@ public class ConversionService extends Service {
             boolean verified=verify(out,info.image,runtime);
             boolean seekOk=info.image || verifySeek(out,runtime);
             long bytes=querySize(out);
+            completed++; lastName=displayName(out); lastBytes=bytes; totalBytes+=Math.max(0,bytes);
             String mark=verified&&seekOk?"✓ ":"⚠ ";
             String note=!verified?" verify warning":(!seekOk?" seek warning":" • seek OK");
             addHistory(mark+outName+" — "+human(bytes)+note);
         }
 
-        String msg=cancelRequested?"Cancelled":fail==0?"Complete":"Complete • "+fail+" failed";
-        update(total,total,100,0,0,msg,true);
-        notifyDone(msg);
+        String title,msg;
+        if(cancelRequested){
+            title="ClipAMV • Cancelled";
+            msg="Finished "+completed+"/"+total+" files before cancellation";
+        }else if(total==1 && completed==1){
+            title="✓ "+lastName+" completed";
+            msg=human(lastBytes)+" • Ready";
+        }else if(total==1){
+            title="ClipAMV • Conversion failed";
+            msg="No output was completed";
+        }else{
+            title=fail==0?"✓ Queue complete • "+completed+"/"+total:"Queue finished • "+completed+"/"+total;
+            msg="Last: "+(lastName.isEmpty()?"None":lastName)+" • "+human(totalBytes)+(fail>0?" • "+fail+" failed":"");
+        }
+        update(total,total,100,0,0,title+" • "+msg,true);
         getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
-        releaseWake();stopForeground(false);stopSelf();
+        releaseWake();stopForeground(true);
+        notifyDone(title,msg);stopSelf();
     }
 
     private boolean convertOne(Uri in,Uri out,PresetEngine.SourceInfo info,PresetEngine.Preset preset,
@@ -116,7 +136,7 @@ public class ConversionService extends Service {
         String inSaf=FFmpegKitConfig.getSafParameterForRead(this,in);
         String outSaf=FFmpegKitConfig.getSafParameterForWrite(this,out);
         String cmd=info.image?PresetEngine.buildImageCommand(inSaf,outSaf,preset):
-                PresetEngine.buildVideoCommand(inSaf,outSaf,preset,start,end,test);
+                PresetEngine.buildVideoCommand(inSaf,outSaf,preset,start,end,test,performanceMode);
 
         CountDownLatch latch=new CountDownLatch(1);
         final boolean[] ok={false};
@@ -124,6 +144,10 @@ public class ConversionService extends Service {
             ok[0]=ReturnCode.isSuccess(done.getReturnCode());latch.countDown();
         },log->{},stats->{
             if(cancelRequested)return;
+            long now=SystemClock.elapsedRealtime();
+            long interval=performanceMode==2?1600:performanceMode==1?900:400;
+            if(now-lastProgressUpdateMs<interval)return;
+            lastProgressUpdateMs=now;
             long t=(long)stats.getTime();
             int pct=runtime>0?(int)Math.min(99,(t/1000.0)*100.0/runtime):0;
             double speed=stats.getSpeed();
@@ -252,10 +276,13 @@ public class ConversionService extends Service {
 
     private void update(int index,int total,int pct,double speed,long eta,String label,boolean done){
         int overall=total<=0?pct:(int)Math.min(100,((index+pct/100.0)/total)*100);
-        String msg=label+" • "+pct+"%"+(speed>0?" • "+String.format(Locale.US,"%.1fx",speed):"")+(eta>0?" • "+eta(eta)+" left":"");
+        String msg=done?label:label+" • "+pct+"%"+(speed>0?" • "+String.format(Locale.US,"%.1fx",speed):"")+(eta>0?" • "+eta(eta)+" left":"");
         ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFY_ID,notification(overall,msg));
+        String tele="Speed: "+(speed>0?String.format(Locale.US,"%.1fx",speed):"—")+
+                " • CPU: "+performanceLabel()+" • Thermal: "+thermalLabel()+" • Battery: "+batteryLabel();
         Intent i=new Intent(ACTION_PROGRESS);i.setPackage(getPackageName());
-        i.putExtra("pct",pct);i.putExtra("overall",overall);i.putExtra("msg",msg);i.putExtra("done",done);sendBroadcast(i);
+        i.putExtra("pct",pct);i.putExtra("overall",overall);i.putExtra("msg",msg);i.putExtra("done",done);
+        i.putExtra("telemetry",tele);sendBroadcast(i);
     }
 
     private void startFg(String msg,int pct){
@@ -276,10 +303,29 @@ public class ConversionService extends Service {
         return b.build();
     }
 
-    private void notifyDone(String msg){
+    private void notifyDone(String title,String msg){
         Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
-        b.setContentTitle("ClipAMV").setContentText(msg).setSmallIcon(android.R.drawable.stat_sys_download_done).setAutoCancel(true);
+        PendingIntent open=PendingIntent.getActivity(this,1,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
+        b.setContentTitle(title).setContentText(msg).setStyle(new Notification.BigTextStyle().bigText(msg))
+                .setContentIntent(open).setSmallIcon(android.R.drawable.stat_sys_download_done).setAutoCancel(true);
         ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(101,b.build());
+    }
+    private String performanceLabel(){return performanceMode==2?"Maximum":performanceMode==1?"Faster":"Standard";}
+    private String thermalLabel(){
+        if(Build.VERSION.SDK_INT<29)return "N/A";
+        PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
+        if(pm==null)return "N/A";
+        int t=pm.getCurrentThermalStatus();
+        if(t>=PowerManager.THERMAL_STATUS_SEVERE)return "SEVERE";
+        if(t>=PowerManager.THERMAL_STATUS_MODERATE)return "MODERATE";
+        if(t>=PowerManager.THERMAL_STATUS_LIGHT)return "WARM";
+        return "NORMAL";
+    }
+    private String batteryLabel(){
+        Intent i=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if(i==null)return "N/A";
+        int level=i.getIntExtra(BatteryManager.EXTRA_LEVEL,-1),scale=i.getIntExtra(BatteryManager.EXTRA_SCALE,-1);
+        return level<0||scale<=0?"N/A":Math.round(100f*level/scale)+"%";
     }
 
     private void createChannel(){
