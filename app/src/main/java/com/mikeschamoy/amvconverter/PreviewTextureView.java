@@ -46,6 +46,18 @@ public class PreviewTextureView extends TextureView implements TextureView.Surfa
         }
         int h=preset.visibleHeight;float sh=h,cy=0;if(preset.name.startsWith("YT 208")){sh=216;cy=4;}
         double aw=sourceW,ah=sourceH,bx=0,by=0;if(preset.detectedCrop!=null){bx=preset.detectedCrop.x;by=preset.detectedCrop.y;aw=preset.detectedCrop.w;ah=preset.detectedCrop.h;}
+        if(preset.narrowFit){
+            // Fit the entire cropped source into the centered content area.
+            // No phantom 320px crop: avoids an off-center right-side blank strip.
+            float contentW=Math.min(320f,(float)preset.contentWidth);
+            float left=vw*(320f-contentW)/640f;
+            float pad=(240f-h)/2f;
+            RectF srcFit=new RectF((float)(bx/sourceW*vw),(float)(by/sourceH*vh),
+                    (float)((bx+aw)/sourceW*vw),(float)((by+ah)/sourceH*vh));
+            RectF dstFit=new RectF(left,vh*pad/240f,vw-left,vh*(pad+h)/240f);
+            m.setRectToRect(srcFit,dstFit,Matrix.ScaleToFit.FILL);
+            setTransform(m);return;
+        }
         double scaledW=aw*sh/ah,center=(scaledW-320)/2.0,raw=Math.max(0,Math.min(center-32,Math.max(0,scaledW-320))),shown=playerView?Math.max(0,Math.min(center,Math.max(0,scaledW-320))):raw;
         double sx=bx+(shown/scaledW)*aw,sy=by+(cy/sh)*ah,sw=(320.0/scaledW)*aw,srcH=(h/sh)*ah;
         RectF srcV=new RectF((float)(sx/sourceW*vw),(float)(sy/sourceH*vh),(float)((sx+sw)/sourceW*vw),(float)((sy+srcH)/sourceH*vh));

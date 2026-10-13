@@ -35,6 +35,7 @@ public class MainActivity extends Activity {
     private int heightOverride=0,fpsOverride=0;
     private boolean preserve43=false,playerView=true,advanced=false,queueAuto=true,usingProxy=false,generatingProxy=false,conversionActive=false;
     private int performanceMode=0;
+    private boolean previewSeeking=false;
     private PresetEngine.Crop crop;
     private String latestDiagnostics="ClipAMV diagnostics unavailable.";
     private long sourceGeneration=0,queueGeneration=0;
@@ -58,9 +59,15 @@ public class MainActivity extends Activity {
     private final Runnable seekUpdater=new Runnable(){
         @Override public void run(){
             if(preview!=null&&preview.duration()>0){
-                previewSeek.setProgress((int)(1000.0*preview.position()/preview.duration()));
-                double shown=(usingProxy?proxyBaseSeconds:0)+preview.position()/1000.0;
-                previewTime.setText(fmtTime(shown));
+                if(!previewSeeking)previewSeek.setProgress((int)(1000.0*preview.position()/preview.duration()));
+                if(!previewSeeking){
+                    double shown=(usingProxy?proxyBaseSeconds:0)+preview.position()/1000.0;
+                    previewTime.setText(fmtTime(shown));
+                }
+                boolean playing=preview.isPlaying();
+                String symbol=playing?"❚❚":"▶";
+                if(!symbol.contentEquals(playPreviewButton.getText()))playPreviewButton.setText(symbol);
+                playPreviewButton.setContentDescription(playing?"Pause preview":"Play preview");
             }
             handler.postDelayed(this,500);
         }
@@ -184,14 +191,31 @@ public class MainActivity extends Activity {
                 else if(usingProxy&&!generatingProxy)extractFrameAt(currentPreviewSeconds());
             }
         });
-        playPreviewButton.setOnClickListener(v->{preview.toggle();playPreviewButton.setText(preview.isPlaying()?"❚❚":"▶");});
+        playPreviewButton.setOnClickListener(v->togglePreviewPlayback());
+        // TextureView itself is a tap target as well as the larger button.
+        preview.setOnClickListener(v->togglePreviewPlayback());
         previewSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            public void onProgressChanged(SeekBar s,int p,boolean user){if(user&&preview.duration()>0)preview.seekTo((int)(preview.duration()*p/1000.0));}
-            public void onStartTrackingTouch(SeekBar s){}
-            public void onStopTrackingTouch(SeekBar s){}
+            public void onProgressChanged(SeekBar s,int p,boolean user){
+                if(user&&preview.duration()>0){
+                    double shown=(usingProxy?proxyBaseSeconds:0)+preview.duration()*p/1000000.0;
+                    previewTime.setText(fmtTime(shown));
+                }
+            }
+            public void onStartTrackingTouch(SeekBar s){previewSeeking=true;}
+            public void onStopTrackingTouch(SeekBar s){
+                if(preview.duration()>0)preview.seekTo((int)(preview.duration()*s.getProgress()/1000.0));
+                previewSeeking=false;
+            }
         });
     }
 
+    private void togglePreviewPlayback(){
+        if(preview==null||preview.duration()<=0)return;
+        preview.toggle();
+        boolean playing=preview.isPlaying();
+        playPreviewButton.setText(playing?"❚❚":"▶");
+        playPreviewButton.setContentDescription(playing?"Pause preview":"Play preview");
+    }
     private void selfTest(){
         stateBadge.setText("CHECKING");
         FFmpegKit.executeAsync("-hide_banner -encoders",session->runOnUiThread(()->{
@@ -383,7 +407,7 @@ public class MainActivity extends Activity {
         FFmpegKit.executeAsync("-ss "+f3(ss)+" -i "+q(saf)+" -t 8 -vf cropdetect=24:16:0 -an -f null -",done->runOnUiThread(()->{
             if(gen!=sourceGeneration)return; Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(logs.toString()); PresetEngine.Crop last=null;
             while(m.find())last=new PresetEngine.Crop(Integer.parseInt(m.group(1)),Integer.parseInt(m.group(2)),Integer.parseInt(m.group(3)),Integer.parseInt(m.group(4)));
-            if(last!=null&&!(last.w>=source.width-8&&last.h>=source.height-8)){crop=last;cropText.setText("Detected: "+last);refresh();}
+            if(PresetEngine.isMeaningfulCrop(source,last)){crop=last;cropText.setText("Detected: "+last);refresh();}
             else cropText.setText("No stable black-bar crop detected.");
         }),log->logs.append(log.getMessage()).append('\n'),stats->{});
     }
@@ -392,7 +416,8 @@ public class MainActivity extends Activity {
 
     private void refresh(){
         if(source==null)return; PresetEngine.Preset p=preset();
-        reasonText.setText(PresetEngine.explain(source,type,p)+" • 320×"+p.visibleHeight+" • "+((240-p.visibleHeight)/2)+" px bars");
+        String picture=p.narrowFit?p.contentWidth+"×"+p.visibleHeight+" centered": "320×"+p.visibleHeight;
+        reasonText.setText(PresetEngine.explain(source,type,p)+" • "+picture+" • "+((240-p.visibleHeight)/2)+" px bars");
         outputNameText.setText("OUTPUT\n"+FileNameCleaner.clean(displayName(inputUri),type,source.image));
         presetText.setText("Preset Engine "+PresetEngine.PRESET_VERSION+"\n"+p.name+"\n"+p.filter+(p.q>0?"\nq="+p.q:""));
         latestDiagnostics=diagnostics(p); style(); refreshPreview(); refreshEstimate(); refreshQueueEstimate(); if(queueInfo.size()==queueUris.size()&&!queueInfo.isEmpty())rebuildQueueRows();

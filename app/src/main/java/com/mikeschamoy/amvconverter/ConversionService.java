@@ -202,8 +202,7 @@ public class ConversionService extends Service {
         Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(session.getOutput());
         PresetEngine.Crop last=null;
         while(m.find())last=new PresetEngine.Crop(Integer.parseInt(m.group(1)),Integer.parseInt(m.group(2)),Integer.parseInt(m.group(3)),Integer.parseInt(m.group(4)));
-        if(last!=null&&last.w>=info.width-8&&last.h>=info.height-8)return null;
-        return last;
+        return PresetEngine.isMeaningfulCrop(info,last)?last:null;
     }
 
     private boolean verify(Uri out,boolean image,double expected){

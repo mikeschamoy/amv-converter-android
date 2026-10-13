@@ -81,7 +81,7 @@
         </com.mikeschamoy.amvconverter.PlayerPreviewFrame>
 
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-            <Button android:id="@+id/playPreviewButton" android:layout_width="56dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="▶" android:textColor="@color/text"/>
+            <Button android:id="@+id/playPreviewButton" android:layout_width="100dp" android:layout_height="64dp" android:background="@drawable/button_selector" android:contentDescription="Play preview" android:text="▶" android:textSize="26sp" android:gravity="center" android:textColor="@color/text"/>
             <SeekBar android:id="@+id/previewSeek" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="1000"/>
             <TextView android:id="@+id/previewTime" android:layout_width="58dp" android:layout_height="wrap_content" android:gravity="center" android:text="0:00" android:textColor="@color/muted"/>
         </LinearLayout>

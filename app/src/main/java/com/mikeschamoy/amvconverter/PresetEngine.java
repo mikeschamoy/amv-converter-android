@@ -2,7 +2,7 @@ package com.mikeschamoy.amvconverter;
 import java.util.Locale;
 
 public final class PresetEngine {
-    public static final String PRESET_VERSION="3.0";
+    public static final String PRESET_VERSION="3.1";
     public enum Type { YOUTUBE, MOVIE_SHOW, CARTOON, PORTRAIT }
     public enum Mode { SPACE_SAVER, STANDARD, QUALITY }
     public enum PortraitMode { FIT, ZOOM, ROTATE }
@@ -29,12 +29,21 @@ public final class PresetEngine {
         public String name,filter;
         public int outputFps,blockSize,visibleHeight;
         public int q=-1,qmin=-1;
-        public boolean fourThree,fourThreePreserve,imageOutput;
+        public boolean fourThree,fourThreePreserve,imageOutput,narrowFit;
+        public int contentWidth=320;
         public Crop detectedCrop;
         public Mode mode;
     }
 
     private PresetEngine(){}
+    // Ignore tiny noisy edge margins reported by cropdetect as black bars.
+    public static boolean isMeaningfulCrop(SourceInfo source,Crop crop){
+        if(source==null||crop==null||crop.w<=0||crop.h<=0||crop.x<0||crop.y<0
+                ||crop.x+crop.w>source.width||crop.y+crop.h>source.height)return false;
+        int lostW=source.width-crop.w,lostH=source.height-crop.h;
+        return lostW>Math.max(16,(int)Math.round(source.width*0.03))
+                ||lostH>Math.max(12,(int)Math.round(source.height*0.03));
+    }
 
     public static Preset choose(SourceInfo s,Type type,Mode mode,int heightOverride,int fpsOverride,
                                 boolean preserve43,PortraitMode portraitMode,Crop crop){
@@ -95,7 +104,18 @@ public final class PresetEngine {
         }
         int pad=(240-h)/2;
         String prefix=crop==null?"":crop.toString()+",";
-        if(type==Type.YOUTUBE&&h==208){
+        // A 3:2 source at 192 high is only 288 pixels wide: cropping 320 would fail.
+        // For narrow landscape sources, preserve the full picture and pad left/right.
+        // The special YT 208 preset scales first to 216, so use that width in the check.
+        int scaleHeight=(type==Type.YOUTUBE&&h==208)?216:h;
+        double sourceRatio=crop!=null?crop.ratio():s.ratio();
+        int scaledWidth=Math.max(2,2*(int)Math.round(sourceRatio*scaleHeight/2.0));
+        if(scaledWidth<320){
+            int fitWidth=Math.max(2,2*(int)Math.round(sourceRatio*h/2.0));
+            String flags=type==Type.CARTOON?"lanczos+accurate_rnd":"lanczos";
+            p.narrowFit=true;p.contentWidth=fitWidth;
+            p.filter=prefix+"scale=-2:"+h+":flags="+flags+",pad=320:240:(ow-iw)/2:"+pad+":black,setsar=1";
+        }else if(type==Type.YOUTUBE&&h==208){
             p.filter=prefix+"scale=-2:216:flags=lanczos,crop=320:208:x='(iw-ow)/2-32':y='(ih-oh)/2',pad=320:240:0:16:black";
         }else{
             String flags=type==Type.CARTOON?"lanczos+accurate_rnd":"lanczos";
@@ -103,7 +123,7 @@ public final class PresetEngine {
         }
         p.visibleHeight=h;
         String label=type==Type.YOUTUBE?"YT":type==Type.CARTOON?"CARTOON":"MOVIE";
-        p.name=label+" "+h+" - "+p.outputFps;
+        p.name=label+" "+h+(p.narrowFit?" FIT":"")+" - "+p.outputFps;
         if(type==Type.CARTOON&&mode!=Mode.SPACE_SAVER&&p.q<0){p.q=1;p.qmin=1;}
         return p;
     }
