@@ -576,7 +576,7 @@ public class MainActivity extends Activity {
         File out=new File(getCacheDir(),"clipamv_proxy_"+gen+"_"+job+".mp4");
         stateBadge.setText("PREVIEW");statusText.setText("Rendering exact 320×240 framing preview…");
         // The preview goes through EXACTLY the same -vf chain as the AMV output.
-        String cmd="-y -ss "+f3(ss)+" -autorotate -i "+q(saf)+" -t 10 -vf "+q(selected.filter)+
+        String cmd="-y -ss "+f3(ss)+" -i "+q(saf)+" -t 10 -vf "+q(selected.filter)+
                 " -map 0:v:0 -map 0:a:0? -r 15 -c:v mpeg4 -q:v 5 -pix_fmt yuv420p "+
                 "-c:a aac -b:a 64k -movflags +faststart "+q(out.getAbsolutePath());
         FFmpegSession rendering=FFmpegKit.executeAsync(cmd,session->runOnUiThread(()->{
@@ -670,12 +670,12 @@ public class MainActivity extends Activity {
         statusText.setText("Rendering Sharp and Smooth from the same frame…");
         new Thread(()->{
             Bitmap[] images=new Bitmap[2];
-            String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
             for(int i=0;i<2;i++){
+                String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
                 PresetEngine.PictureMode pm=i==0?PresetEngine.PictureMode.SHARP:PresetEngine.PictureMode.SMOOTH;
                 PresetEngine.Preset selected=PresetEngine.choose(info,t,m,hh,ff,p43,portrait,c,frame,pm);
                 File out=new File(getCacheDir(),"clipamv_compare_"+gen+"_"+i+".png");
-                String cmd="-y "+(!info.image?"-ss "+f3(pos)+" ":"")+"-autorotate -i "+q(saf)+
+                String cmd="-y "+(!info.image?"-ss "+f3(pos)+" ":"")+"-i "+q(saf)+
                     " -frames:v 1 -vf "+q(selected.filter)+" -an "+q(out.getAbsolutePath());
                 FFmpegSession render=FFmpegKit.execute(cmd);
                 if(ReturnCode.isSuccess(render.getReturnCode()))images[i]=BitmapFactory.decodeFile(out.getAbsolutePath());

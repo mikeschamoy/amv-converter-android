@@ -118,7 +118,7 @@ public final class PresetEngine {
         if(performance==1)c.append("-filter_threads 2 ");
         else if(performance==2)c.append("-filter_threads 0 ");
         if(start>0)c.append("-ss ").append(fmt(start)).append(" ");
-        c.append("-autorotate -i ").append(q(in)).append(" ");
+        c.append("-i ").append(q(in)).append(" ");
         if(!p.audioPresent)c.append("-f lavfi -i anullsrc=r=22050:cl=mono ");
         if(test)c.append("-t 30 ");
         else if(end>start&&end>0)c.append("-t ").append(fmt(end-start)).append(" ");

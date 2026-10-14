@@ -25,12 +25,12 @@ public final class PictureAnalysis {
         double bpp=info.inputBytes>0&&info.durationSeconds>1&&info.fps>0?
             info.inputBytes*8.0/info.durationSeconds/Math.max(1.0,info.width*(double)info.height*info.fps):Double.NaN;
         double boundary=0; int valid=0;
-        String input=FFmpegKitConfig.getSafParameterForRead(ctx,uri);
         double duration=Math.max(0,info.durationSeconds);
         for(int n=0;n<3;n++){
             double at=duration>8?Math.min(duration-0.3,duration*(0.20+0.30*n)):Math.max(0,duration/2);
             File f=new File(ctx.getCacheDir(),"clipamv_quality_"+Thread.currentThread().getId()+"_"+n+".png");
-            String cmd="-y -ss "+String.format(Locale.US,"%.3f",at)+" -autorotate -i "+quote(input)+
+            String input=FFmpegKitConfig.getSafParameterForRead(ctx,uri);
+            String cmd="-y -ss "+String.format(Locale.US,"%.3f",at)+" -i "+quote(input)+
                 " -frames:v 1 -vf scale=160:90:force_original_aspect_ratio=decrease,pad=160:90:(ow-iw)/2:(oh-ih)/2:black "+quote(f.getAbsolutePath());
             try {
                 FFmpegSession result=FFmpegKit.execute(cmd);
