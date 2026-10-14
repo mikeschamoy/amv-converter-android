@@ -24,7 +24,7 @@ public class ConversionService extends Service {
     public static final String EXTRA_INPUT="input",EXTRA_INPUTS="inputs",EXTRA_OUTPUT="output",EXTRA_TREE="tree";
     public static final String EXTRA_TYPE="type",EXTRA_MODE="mode",EXTRA_HEIGHT="height",EXTRA_FPS="fps";
     public static final String EXTRA_43="f43",EXTRA_PORTRAIT="portrait",EXTRA_AUTOBARS="autobars";
-    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test",EXTRA_DOWNLOADS="downloads",EXTRA_QUEUE_AUTO="queueAuto",EXTRA_PERFORMANCE="performance";
+    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test",EXTRA_DOWNLOADS="downloads",EXTRA_QUEUE_AUTO="queueAuto",EXTRA_PERFORMANCE="performance",EXTRA_FRAME_MODE="frameMode",EXTRA_PICTURE_MODE="pictureMode";
 
     private static final String CHANNEL="conversion";
     private static final int NOTIFY_ID=100;
@@ -66,6 +66,8 @@ public class ConversionService extends Service {
         PresetEngine.Mode mode=PresetEngine.Mode.values()[intent.getIntExtra(EXTRA_MODE,1)];
         int height=intent.getIntExtra(EXTRA_HEIGHT,0);
         int fps=intent.getIntExtra(EXTRA_FPS,0);
+        PresetEngine.PictureMode picture=PresetEngine.PictureMode.values()[Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_PICTURE_MODE,0)))];
+        PresetEngine.FrameMode frame=PresetEngine.FrameMode.values()[Math.max(0,Math.min(1,intent.getIntExtra(EXTRA_FRAME_MODE,0)))];
         boolean preserve43=intent.getBooleanExtra(EXTRA_43,false);
         PresetEngine.PortraitMode portrait=PresetEngine.PortraitMode.values()[intent.getIntExtra(EXTRA_PORTRAIT,0)];
         boolean autoBars=intent.getBooleanExtra(EXTRA_AUTOBARS,true);
@@ -85,10 +87,18 @@ public class ConversionService extends Service {
             if(info==null){fail++;addHistory("✕ "+original+" — inspect failed");continue;}
 
             PresetEngine.Crop crop=autoBars&&!info.image?detectBars(in,info):null;
-            PresetEngine.Type itemType=queueAuto&&info.isPortrait()?PresetEngine.Type.PORTRAIT:type;
+            if(total==1&&intent.hasExtra("manualCropW")){crop=new PresetEngine.Crop(
+                    intent.getIntExtra("manualCropW",0),intent.getIntExtra("manualCropH",0),
+                    intent.getIntExtra("manualCropX",0),intent.getIntExtra("manualCropY",0));}
+            PresetEngine.Type itemType=queueAuto?(info.isPortrait()?PresetEngine.Type.PORTRAIT:(type==PresetEngine.Type.PORTRAIT?PresetEngine.Type.YOUTUBE:type)):type;
             int itemHeight=queueAuto?0:height;
             int itemFps=queueAuto?0:fps;
-            PresetEngine.Preset preset=PresetEngine.choose(info,itemType,mode,itemHeight,itemFps,preserve43,portrait,crop);
+            PresetEngine.PictureMode processing=picture;
+            if(picture==PresetEngine.PictureMode.AUTO){
+                PictureAnalysis.Result result=PictureAnalysis.analyze(this,in,info);
+                processing=result.mode;
+            }
+            PresetEngine.Preset preset=PresetEngine.choose(info,itemType,mode,itemHeight,itemFps,preserve43,portrait,crop,frame,processing);
 
             String outName=FileNameCleaner.clean(original,itemType,info.image);
             Uri out;
@@ -166,7 +176,7 @@ public class ConversionService extends Service {
 
     private PresetEngine.SourceInfo inspect(Uri uri){
         String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
-        String cmd="-v error -show_entries stream=index,codec_type,codec_name,width,height,avg_frame_rate "+
+        String cmd="-v error -show_entries stream=index,codec_type,codec_name,width,height,avg_frame_rate,sample_aspect_ratio,display_aspect_ratio:stream_side_data=rotation:stream_tags=rotate "+
                 "-show_entries format=duration -of default=noprint_wrappers=1 "+q(saf);
         FFprobeSession ss=FFprobeKit.execute(cmd);
         String out=ss.getOutput();
@@ -182,6 +192,9 @@ public class ConversionService extends Service {
                     else if("audio".equals(currentType)){s.audioCodec=line.substring(11);s.audioPresent=true;}
                 }else if(line.startsWith("width=")&&s.width==0)s.width=Integer.parseInt(line.substring(6));
                 else if(line.startsWith("height=")&&s.height==0)s.height=Integer.parseInt(line.substring(7));
+                else if(line.startsWith("sample_aspect_ratio=")){double r=line.endsWith("N/A")?0:rational(line.substring(20).replace(':','/'));if(r>0)s.sampleAspect=r;}
+                else if(line.startsWith("rotation="))s.rotation=(int)Math.round(Double.parseDouble(line.substring(9)));
+                else if(line.startsWith("TAG:rotate="))s.rotation=(int)Math.round(Double.parseDouble(line.substring(11)));
                 else if(line.startsWith("avg_frame_rate=")&&s.fps==0)s.fps=rational(line.substring(15));
                 else if(line.startsWith("duration=")&&!line.endsWith("N/A"))s.durationSeconds=Double.parseDouble(line.substring(9));
             }
@@ -211,9 +224,9 @@ public class ConversionService extends Service {
             FFprobeSession s=FFprobeKit.execute("-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "+q(saf));
             return s.getOutput()!=null&&!s.getOutput().trim().isEmpty();
         }
-        FFprobeSession s=FFprobeKit.execute("-v error -select_streams v:0 -show_entries stream=codec_name -show_entries format=duration -of default=nw=1 "+q(saf));
+        FFprobeSession s=FFprobeKit.execute("-v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=nw=1 "+q(saf));
         String o=s.getOutput();
-        if(o==null||!o.contains("codec_name=amv"))return false;
+        if(o==null||!o.contains("codec_name=amv")||!o.contains("width=320")||!o.contains("height=240"))return false;
         Matcher m=Pattern.compile("duration=([0-9.]+)").matcher(o);
         if(m.find()&&expected>3){
             double d=Double.parseDouble(m.group(1));
@@ -295,7 +308,7 @@ public class ConversionService extends Service {
         Intent ci=new Intent(this,ConversionService.class);ci.setAction(ACTION_CANCEL);
         PendingIntent cancel=PendingIntent.getService(this,2,ci,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
-        b.setContentTitle("ClipAMV").setContentText(text).setSmallIcon(android.R.drawable.stat_sys_download)
+        b.setContentTitle("ClipAMV").setContentText(text).setSmallIcon(R.drawable.ic_stat_clipamv)
                 .setContentIntent(open).setOnlyAlertOnce(true).setOngoing(pct<100)
                 .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel,"Cancel",cancel).build());
         if(pct>0&&pct<100)b.setProgress(100,pct,false);else if(pct==0)b.setProgress(0,0,true);
@@ -306,7 +319,7 @@ public class ConversionService extends Service {
         Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
         PendingIntent open=PendingIntent.getActivity(this,1,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         b.setContentTitle(title).setContentText(msg).setStyle(new Notification.BigTextStyle().bigText(msg))
-                .setContentIntent(open).setSmallIcon(android.R.drawable.stat_sys_download_done).setAutoCancel(true);
+                .setContentIntent(open).setSmallIcon(R.drawable.ic_stat_clipamv).setAutoCancel(true);
         ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(101,b.build());
     }
     private String performanceLabel(){return performanceMode==2?"Maximum":performanceMode==1?"Faster":"Standard";}

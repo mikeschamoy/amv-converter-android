@@ -1,20 +1,25 @@
 package com.mikeschamoy.amvconverter;
 import android.content.Context;
-import android.graphics.*;
+import android.graphics.Matrix;
+import android.graphics.SurfaceTexture;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.util.AttributeSet;
-import android.view.*;
+import android.view.Surface;
+import android.view.TextureView;
 
 public class PreviewTextureView extends TextureView implements TextureView.SurfaceTextureListener {
-    public interface Listener{void onReady(int w,int h,int d);void onError();}
-    private MediaPlayer player;private Uri uri;private Listener listener;private PresetEngine.Preset preset;
-    private boolean playerView=true;private int sourceW,sourceH;
+    public interface Listener {void onReady(int w,int h,int d);void onError();void onFinished();}
+    private MediaPlayer player;
+    private Uri uri;
+    private Listener listener;
+    private boolean playerView=true,encodedPreview=false;
     public PreviewTextureView(Context c,AttributeSet a){super(c,a);setSurfaceTextureListener(this);}
     public void setListener(Listener l){listener=l;}
-    public void setVideo(Uri u){uri=u;setTransform(new Matrix());if(isAvailable())prepare();}
+    public void setEncodedPreview(boolean b){encodedPreview=b;apply();}
+    public void setVideo(Uri u){uri=u;if(isAvailable())prepare();}
     public void clearSource(){uri=null;release();setTransform(new Matrix());}
-    public void setPreset(PresetEngine.Preset p,boolean pv){preset=p;playerView=pv;apply();}
+    public void setPreset(PresetEngine.Preset p,boolean pv){playerView=pv;apply();}
     public void toggle(){if(player==null)return;if(player.isPlaying())player.pause();else player.start();}
     public boolean isPlaying(){return player!=null&&player.isPlaying();}
     public int duration(){return player==null?0:player.getDuration();}
@@ -23,46 +28,25 @@ public class PreviewTextureView extends TextureView implements TextureView.Surfa
     private void prepare(){
         release();if(uri==null||!isAvailable())return;
         try{
-            player=new MediaPlayer();player.setDataSource(getContext(),uri);player.setSurface(new Surface(getSurfaceTexture()));player.setLooping(true);
-            player.setOnVideoSizeChangedListener((mp,w,h)->{sourceW=w;sourceH=h;apply();});
-            player.setOnPreparedListener(mp->{sourceW=mp.getVideoWidth();sourceH=mp.getVideoHeight();apply();if(listener!=null)listener.onReady(sourceW,sourceH,mp.getDuration());});
-            player.setOnErrorListener((mp,w,e)->{if(listener!=null)listener.onError();return true;});player.prepareAsync();
+            player=new MediaPlayer();player.setDataSource(getContext(),uri);
+            player.setSurface(new Surface(getSurfaceTexture()));player.setLooping(false);
+            player.setOnPreparedListener(mp->{apply();if(listener!=null)listener.onReady(mp.getVideoWidth(),mp.getVideoHeight(),mp.getDuration());});
+            player.setOnVideoSizeChangedListener((mp,w,h)->apply());
+            player.setOnCompletionListener(mp->{if(listener!=null)listener.onFinished();});
+            player.setOnErrorListener((mp,w,e)->{if(listener!=null)listener.onError();return true;});
+            player.prepareAsync();
         }catch(Exception e){if(listener!=null)listener.onError();}
     }
     private void apply(){
-        if(sourceW<=0||sourceH<=0||getWidth()<=0||getHeight()<=0||preset==null)return;
-        float vw=getWidth(),vh=getHeight();Matrix m=new Matrix();
-        if(preset.fourThree){
-            if(preset.fourThreePreserve){
-                RectF src=new RectF(0,0,vw,vh);float dx=playerView?0:vw*(32f/320f);
-                RectF dst=new RectF(dx,vh*(12f/240f),dx+vw*(288f/320f),vh*((12f+216f)/240f));
-                m.setRectToRect(src,dst,Matrix.ScaleToFit.FILL);
-            }
-            setTransform(m);return;
+        if(getWidth()<=0||getHeight()<=0)return;
+        Matrix m=new Matrix();
+        if(encodedPreview&&playerView){
+            // The physical Gen 2 shows encoded columns 64..319; enlarge that crop.
+            float stretch=320f/PresetEngine.PLAYER_VIEW_WIDTH;
+            m.setScale(stretch,1f);
+            m.postTranslate(-PresetEngine.PLAYER_VIEW_X*stretch*getWidth()/320f,0);
         }
-        if(preset.name.startsWith("PORTRAIT")){
-            if(preset.name.contains("ROTATE")){m.setRotate(90,vw/2f,vh/2f);float sc=Math.min(vw/vh,vh/vw);m.postScale(sc,sc,vw/2f,vh/2f);}
-            setTransform(m);return;
-        }
-        int h=preset.visibleHeight;float sh=h,cy=0;if(preset.name.startsWith("YT 208")){sh=216;cy=4;}
-        double aw=sourceW,ah=sourceH,bx=0,by=0;if(preset.detectedCrop!=null){bx=preset.detectedCrop.x;by=preset.detectedCrop.y;aw=preset.detectedCrop.w;ah=preset.detectedCrop.h;}
-        if(preset.narrowFit){
-            // Fit the entire cropped source into the centered content area.
-            // No phantom 320px crop: avoids an off-center right-side blank strip.
-            float contentW=Math.min(320f,(float)preset.contentWidth);
-            float left=vw*(320f-contentW)/640f;
-            float pad=(240f-h)/2f;
-            RectF srcFit=new RectF((float)(bx/sourceW*vw),(float)(by/sourceH*vh),
-                    (float)((bx+aw)/sourceW*vw),(float)((by+ah)/sourceH*vh));
-            RectF dstFit=new RectF(left,vh*pad/240f,vw-left,vh*(pad+h)/240f);
-            m.setRectToRect(srcFit,dstFit,Matrix.ScaleToFit.FILL);
-            setTransform(m);return;
-        }
-        double scaledW=aw*sh/ah,center=(scaledW-320)/2.0,raw=Math.max(0,Math.min(center-32,Math.max(0,scaledW-320))),shown=playerView?Math.max(0,Math.min(center,Math.max(0,scaledW-320))):raw;
-        double sx=bx+(shown/scaledW)*aw,sy=by+(cy/sh)*ah,sw=(320.0/scaledW)*aw,srcH=(h/sh)*ah;
-        RectF srcV=new RectF((float)(sx/sourceW*vw),(float)(sy/sourceH*vh),(float)((sx+sw)/sourceW*vw),(float)((sy+srcH)/sourceH*vh));
-        float pad=(240f-h)/2f;RectF dst=new RectF(0,vh*(pad/240f),vw,vh*((pad+h)/240f));
-        m.setRectToRect(srcV,dst,Matrix.ScaleToFit.FILL);setTransform(m);
+        setTransform(m);
     }
     public void release(){if(player!=null){try{player.stop();}catch(Exception ignored){}player.release();player=null;}}
     public void onSurfaceTextureAvailable(SurfaceTexture s,int w,int h){prepare();}

@@ -1,156 +1,142 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/bg"
-    android:fillViewport="true">
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
-
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-            <ImageView android:layout_width="54dp" android:layout_height="54dp" android:src="@drawable/clipamv_logo" android:contentDescription="ClipAMV logo"/>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:background="@drawable/surface_header" android:padding="12dp" android:layout_marginBottom="6dp">
+            <ImageView android:layout_width="58dp" android:layout_height="58dp" android:src="@drawable/clipamv_brandmark" android:contentDescription="ClipAMV logo" />
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:orientation="vertical">
-                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="ClipAMV" android:textColor="@color/text" android:textSize="28sp" android:textStyle="bold"/>
-                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Your Media, Player-Ready" android:textColor="@color/green" android:textSize="13sp"/>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="ClipAMV" android:textColor="@color/text" android:textSize="25sp" android:textStyle="bold" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Any video. Player-ready." android:textColor="@color/green" android:textSize="13sp" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="v0.6  •  UNIVERSAL FRAMING" android:textSize="10sp" android:textColor="@color/muted" android:layout_marginTop="3dp" />
             </LinearLayout>
-            <TextView android:id="@+id/stateBadge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/card_green" android:padding="8dp" android:text="READY" android:textColor="@color/green" android:textStyle="bold"/>
+            <TextView android:id="@+id/stateBadge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/card_green" android:padding="8dp" android:text="READY" android:textColor="@color/green" android:textStyle="bold" />
         </LinearLayout>
-
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:orientation="horizontal">
-            <Button android:id="@+id/selectButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_primary" android:text="SELECT FILE" android:textColor="@color/text"/>
-            <Button android:id="@+id/selectQueueButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:background="@drawable/button_selector" android:text="SELECT QUEUE" android:textColor="@color/text"/>
+            <Button android:id="@+id/selectButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_primary" android:text="SELECT FILE" android:textColor="@color/text" android:minHeight="62dp" android:textAllCaps="false" android:textSize="15sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            <Button android:id="@+id/selectQueueButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:background="@drawable/button_selector" android:text="SELECT QUEUE" android:textColor="@color/text" android:minHeight="62dp" android:textAllCaps="false" android:textSize="15sp" android:layout_margin="2dp" android:includeFontPadding="false" />
         </LinearLayout>
-
-        <TextView android:id="@+id/fileText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="No media selected" android:textColor="@color/muted"/>
-        <LinearLayout android:id="@+id/queuePanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/card" android:orientation="vertical" android:padding="10dp" android:visibility="gone">
-            <TextView android:id="@+id/queueHeader" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="QUEUE" android:textColor="@color/green" android:textStyle="bold"/>
-            <LinearLayout android:id="@+id/queueList" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"/>
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="QUEUE SETTINGS" android:textColor="@color/muted" android:textSize="11sp"/>
+        <TextView android:id="@+id/fileText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="No media selected" android:textColor="@color/muted" android:maxLines="2" android:padding="4dp" />
+        <LinearLayout android:id="@+id/queuePanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/card" android:orientation="vertical" android:padding="14dp" android:visibility="gone">
+            <TextView android:id="@+id/queueHeader" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="QUEUE" android:textColor="@color/green" android:textStyle="bold" />
+            <LinearLayout android:id="@+id/queueList" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="QUEUE SETTINGS" android:textColor="@color/muted" android:textSize="11sp" />
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                <Button android:id="@+id/queueAutoButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="AUTO EACH FILE" android:textColor="@color/text"/>
-                <Button android:id="@+id/queueSameButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="SAME FOR ALL" android:textColor="@color/text"/>
+                <Button android:id="@+id/queueAutoButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="AUTO EACH FILE" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/queueSameButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="SAME FOR ALL" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
             </LinearLayout>
-            <Button android:id="@+id/queueDownloadsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_primary" android:text="START QUEUE → DOWNLOADS" android:textColor="@color/text"/>
-            <Button android:id="@+id/queueFolderButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="CHOOSE ANOTHER FOLDER" android:textColor="@color/text"/>
+            <Button android:id="@+id/queueDownloadsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_primary" android:text="START QUEUE → DOWNLOADS" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            <Button android:id="@+id/queueFolderButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="CHOOSE ANOTHER FOLDER" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
         </LinearLayout>
-        <TextView android:id="@+id/sourceText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="14dp" android:text="SOURCE\n—" android:textColor="@color/text"/>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="CONTENT" android:textColor="@color/muted" android:textSize="11sp"/>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <Button android:id="@+id/youtubeButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="YouTube" android:textColor="@color/text"/>
-            <Button android:id="@+id/movieButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="Movie" android:textColor="@color/text"/>
-            <Button android:id="@+id/cartoonButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="Cartoon" android:textColor="@color/text"/>
-            <Button android:id="@+id/portraitButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="Portrait" android:textColor="@color/text"/>
-        </LinearLayout>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="MODE" android:textColor="@color/muted" android:textSize="11sp"/>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <Button android:id="@+id/spaceSaverButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="SPACE SAVER" android:textColor="@color/text"/>
-            <Button android:id="@+id/standardButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="STANDARD" android:textColor="@color/text"/>
-            <Button android:id="@+id/qualityButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="QUALITY" android:textColor="@color/text"/>
-        </LinearLayout>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="PERFORMANCE" android:textColor="@color/muted" android:textSize="11sp"/>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <Button android:id="@+id/perfStandardButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="STANDARD" android:textColor="@color/text"/>
-            <Button android:id="@+id/perfFasterButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="FASTER" android:textColor="@color/text"/>
-            <Button android:id="@+id/perfMaximumButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="MAXIMUM" android:textColor="@color/text"/>
-        </LinearLayout>
-        <TextView android:id="@+id/reasonText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Auto recommendation will appear here." android:textColor="@color/muted" android:textSize="12sp"/>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="PLAYER PREVIEW" android:textColor="@color/muted" android:textSize="11sp"/>
-        <com.mikeschamoy.amvconverter.PlayerPreviewFrame
-            android:id="@+id/previewFrame"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#000000">
-            <com.mikeschamoy.amvconverter.PreviewTextureView
-                android:id="@+id/previewTexture"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"/>
-            <ImageView
-                android:id="@+id/fallbackImage"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="#000000"
-                android:scaleType="fitCenter"
-                android:visibility="gone"/>
-        </com.mikeschamoy.amvconverter.PlayerPreviewFrame>
-
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-            <Button android:id="@+id/playPreviewButton" android:layout_width="100dp" android:layout_height="64dp" android:background="@drawable/button_selector" android:contentDescription="Play preview" android:text="▶" android:textSize="26sp" android:gravity="center" android:textColor="@color/text"/>
-            <SeekBar android:id="@+id/previewSeek" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="1000"/>
-            <TextView android:id="@+id/previewTime" android:layout_width="58dp" android:layout_height="wrap_content" android:gravity="center" android:text="0:00" android:textColor="@color/muted"/>
-        </LinearLayout>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <Button android:id="@+id/playerViewButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="PLAYER VIEW" android:textColor="@color/text"/>
-            <Button android:id="@+id/rawViewButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="RAW AMV" android:textColor="@color/text"/>
-            <Button android:id="@+id/refreshPreviewButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="REFRESH" android:textColor="@color/text"/>
-        </LinearLayout>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="FRAME" android:textColor="@color/muted" android:textSize="11sp"/>
-        <HorizontalScrollView android:id="@+id/frameScroller" android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
-            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
-                <Button android:id="@+id/h216" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="216" android:textColor="@color/text"/>
-                <Button android:id="@+id/h208" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="208" android:textColor="@color/text"/>
-                <Button android:id="@+id/h200" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="200" android:textColor="@color/text"/>
-                <Button android:id="@+id/h192" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="192" android:textColor="@color/text"/>
-                <Button android:id="@+id/h184" android:layout_width="74dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="184" android:textColor="@color/text"/>
+        <TextView android:id="@+id/sourceText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="14dp" android:text="SOURCE\n—" android:textColor="@color/text" android:textSize="12sp" android:lineSpacingExtra="3dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:orientation="vertical" android:padding="12dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:text="CONTENT TYPE" android:textColor="@color/muted" android:textSize="11sp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/youtubeButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="YouTube" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/movieButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="Movie" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/cartoonButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="Cartoon" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/portraitButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="Portrait" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
             </LinearLayout>
-        </HorizontalScrollView>
-
-        <LinearLayout android:id="@+id/fourThreeRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone">
-            <Button android:id="@+id/fourThreeFull" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="4:3 FULL" android:textColor="@color/text"/>
-            <Button android:id="@+id/fourThreePreserve" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="4:3 PRESERVE" android:textColor="@color/text"/>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="QUALITY • FILE SIZE" android:textColor="@color/muted" android:textSize="11sp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/spaceSaverButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="SPACE SAVER" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/standardButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="STANDARD" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/qualityButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="QUALITY" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            </LinearLayout>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="PERFORMANCE • CPU" android:textColor="@color/muted" android:textSize="11sp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/perfStandardButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="STANDARD" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/perfFasterButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="FASTER" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/perfMaximumButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="MAXIMUM" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            </LinearLayout>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="PICTURE PROCESSING • SOURCE-AWARE" android:textColor="@color/muted" android:textSize="11sp" android:layout_marginTop="11dp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/pictureAutoButton" android:layout_width="0dp" android:layout_height="54dp" android:layout_weight="1" android:layout_margin="2dp" android:text="AUTO" android:textSize="13sp" android:textAllCaps="false" android:background="@drawable/button_selector" android:textColor="@color/text" />
+                <Button android:id="@+id/pictureSharpButton" android:layout_width="0dp" android:layout_height="54dp" android:layout_weight="1" android:layout_margin="2dp" android:text="SHARP" android:textSize="13sp" android:textAllCaps="false" android:background="@drawable/button_selector" android:textColor="@color/text" />
+                <Button android:id="@+id/pictureSmoothButton" android:layout_width="0dp" android:layout_height="54dp" android:layout_weight="1" android:layout_margin="2dp" android:text="SMOOTH" android:textSize="13sp" android:textAllCaps="false" android:background="@drawable/button_selector" android:textColor="@color/text" />
+            </LinearLayout>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="AUTO → analyzing when a file is selected" android:textColor="@color/muted" android:textSize="11sp" android:layout_marginTop="11dp" android:id="@+id/pictureInfo" />
+            <Button android:id="@+id/pictureCompareButton" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="8dp" android:text="Compare Sharp ↔ Smooth • same frame" android:textAllCaps="false" android:textColor="@color/text" android:background="@drawable/button_selector" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="FRAMING • CALIBRATED" android:textColor="@color/muted" android:textSize="11sp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/fitFrameButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="FIT • ALL VISIBLE" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/fillFrameButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="FILL • CROP EDGES" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            </LinearLayout>
+            <TextView android:id="@+id/reasonText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Auto recommendation will appear here." android:textColor="@color/muted" android:textSize="12sp" />
         </LinearLayout>
-
-        <LinearLayout android:id="@+id/portraitRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone">
-            <Button android:id="@+id/portraitFit" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="FIT" android:textColor="@color/text"/>
-            <Button android:id="@+id/portraitZoom" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="ZOOM" android:textColor="@color/text"/>
-            <Button android:id="@+id/portraitRotate" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="ROTATE 90°" android:textColor="@color/text"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:orientation="vertical" android:padding="12dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:text="PLAYER PREVIEW • GEN 2" android:textColor="@color/muted" android:textSize="11sp" />
+            <com.mikeschamoy.amvconverter.PlayerPreviewFrame android:id="@+id/previewFrame" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/preview_hint">
+                <com.mikeschamoy.amvconverter.PreviewTextureView android:id="@+id/previewTexture" android:layout_width="match_parent" android:layout_height="match_parent" />
+                <ImageView android:id="@+id/fallbackImage" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000" android:scaleType="fitCenter" android:visibility="gone" />
+                <TextView android:id="@+id/previewHint" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:background="@drawable/preview_hint" android:text="▶&#10;&#10;Select a video to preview&#10;Player View is calibrated for Gen 2" android:textColor="@color/muted" android:textSize="14sp" android:lineSpacingExtra="5dp" android:visibility="visible" />
+            </com.mikeschamoy.amvconverter.PlayerPreviewFrame>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:layout_marginBottom="4dp" android:text="Fit keeps everything visible • Fill crops edges" android:textSize="11sp" android:textColor="@color/muted" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <Button android:id="@+id/playPreviewButton" android:layout_width="88dp" android:layout_height="64dp" android:background="@drawable/button_selector" android:contentDescription="Toggle preview playback" android:text="▶" android:textSize="26sp" android:gravity="center" android:textColor="@color/text" android:minHeight="64dp" android:textAllCaps="false" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <SeekBar android:id="@+id/previewSeek" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="1000" />
+                <TextView android:id="@+id/previewTime" android:layout_width="58dp" android:layout_height="wrap_content" android:gravity="center" android:text="0:00" android:textColor="@color/muted" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/playerViewButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="PLAYER VIEW" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/rawViewButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="RAW AMV" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/refreshPreviewButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="REFRESH" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            </LinearLayout>
         </LinearLayout>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="FPS" android:textColor="@color/muted" android:textSize="11sp"/>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <Button android:id="@+id/fps15" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="15" android:textColor="@color/text"/>
-            <Button android:id="@+id/fps25" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="25" android:textColor="@color/text"/>
-            <Button android:id="@+id/fps30" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="30" android:textColor="@color/text"/>
-            <Button android:id="@+id/fpsAuto" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="AUTO" android:textColor="@color/text"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:orientation="vertical" android:padding="12dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:text="FRAME HEIGHT" android:textColor="@color/muted" android:textSize="11sp" />
+            <HorizontalScrollView android:id="@+id/frameScroller" android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <Button android:id="@+id/h216" android:layout_width="70dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="216" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                    <Button android:id="@+id/h208" android:layout_width="70dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="208" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                    <Button android:id="@+id/h200" android:layout_width="70dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="200" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                    <Button android:id="@+id/h192" android:layout_width="70dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="192" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                    <Button android:id="@+id/h184" android:layout_width="70dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="184" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                </LinearLayout>
+            </HorizontalScrollView>
+            <LinearLayout android:id="@+id/fourThreeRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone">
+                <Button android:id="@+id/fourThreeFull" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="4:3 FULL" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/fourThreePreserve" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="4:3 PRESERVE" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/portraitRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone">
+                <Button android:id="@+id/portraitFit" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="FIT" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/portraitZoom" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="ZOOM" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/portraitRotate" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="ROTATE 90°" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            </LinearLayout>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="FRAME RATE" android:textColor="@color/muted" android:textSize="11sp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/fps15" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="15" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/fps25" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="25" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/fps30" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="30" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/fpsAuto" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="AUTO" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            </LinearLayout>
         </LinearLayout>
-
-        <TextView android:id="@+id/outputNameText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/card_green" android:fontFamily="monospace" android:padding="12dp" android:text="OUTPUT\n—" android:textColor="@color/green"/>
-
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
-            <Button android:id="@+id/detectBarsButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="DETECT BARS" android:textColor="@color/text"/>
-            <Button android:id="@+id/clearCropButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="CLEAR CROP" android:textColor="@color/text"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:orientation="vertical" android:padding="12dp">
+            <TextView android:id="@+id/outputNameText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:background="@drawable/card_green" android:fontFamily="monospace" android:padding="12dp" android:text="OUTPUT\n—" android:textColor="@color/green" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
+                <Button android:id="@+id/detectBarsButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="DETECT BARS" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+                <Button android:id="@+id/clearCropButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/button_selector" android:text="CLEAR CROP" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            </LinearLayout>
+            <TextView android:id="@+id/cropText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="No detected crop." android:textColor="@color/muted" android:textSize="12sp" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="TRIM • OPTIONAL" android:textColor="@color/muted" android:textSize="11sp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <EditText android:id="@+id/startTrim" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="Start 0:00" android:inputType="text" android:textColor="@color/text" android:textColorHint="@color/muted" android:minHeight="50dp" android:singleLine="true" android:textSize="14sp" android:padding="9dp" />
+                <EditText android:id="@+id/endTrim" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="End" android:inputType="text" android:textColor="@color/text" android:textColorHint="@color/muted" android:minHeight="50dp" android:singleLine="true" android:textSize="14sp" android:padding="9dp" />
+            </LinearLayout>
+            <CheckBox android:id="@+id/testClip" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="30-second test clip" android:textColor="@color/text" />
         </LinearLayout>
-        <TextView android:id="@+id/cropText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="No detected crop." android:textColor="@color/muted" android:textSize="12sp"/>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="TRIM" android:textColor="@color/muted" android:textSize="11sp"/>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <EditText android:id="@+id/startTrim" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="Start 0:00" android:inputType="text" android:textColor="@color/text" android:textColorHint="@color/muted"/>
-            <EditText android:id="@+id/endTrim" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="End" android:inputType="text" android:textColor="@color/text" android:textColorHint="@color/muted"/>
-        </LinearLayout>
-        <CheckBox android:id="@+id/testClip" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="30-second test clip" android:textColor="@color/text"/>
-
-        <TextView android:id="@+id/estimateText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="12dp" android:text="STORAGE\n—" android:textColor="@color/text"/>
-
-        <Button android:id="@+id/advancedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/button_selector" android:text="ADVANCED ▾" android:textColor="@color/text"/>
+        <TextView android:id="@+id/estimateText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="12dp" android:text="STORAGE\n—" android:textColor="@color/text" />
+        <Button android:id="@+id/advancedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/button_selector" android:text="ADVANCED ▾" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
         <LinearLayout android:id="@+id/advancedPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/card" android:orientation="vertical" android:padding="12dp" android:visibility="gone">
-            <TextView android:id="@+id/presetText" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="monospace" android:text="—" android:textColor="@color/green" android:textSize="12sp"/>
-            <Button android:id="@+id/exportDiagnosticsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="EXPORT DIAGNOSTICS" android:textColor="@color/text"/>
-            <Button android:id="@+id/resetDefaultsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="RESTORE DEFAULTS" android:textColor="@color/text"/>
+            <TextView android:id="@+id/presetText" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="monospace" android:text="—" android:textColor="@color/green" android:textSize="12sp" />
+            <Button android:id="@+id/exportDiagnosticsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="EXPORT DIAGNOSTICS" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+            <Button android:id="@+id/resetDefaultsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="RESTORE DEFAULTS" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
         </LinearLayout>
-
-        <Button android:id="@+id/convertButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/button_primary" android:enabled="false" android:text="CONVERT TO AMV" android:textColor="@color/text"/>
-        <Button android:id="@+id/startQueueButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_primary" android:enabled="false" android:text="CHOOSE OUTPUT FOLDER &amp; START QUEUE" android:textColor="@color/text" android:visibility="gone"/>
-        <Button android:id="@+id/cancelButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_selector" android:text="CANCEL" android:textColor="@color/red" android:visibility="gone"/>
-        <ProgressBar android:id="@+id/progressBar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="18dp" android:layout_marginTop="10dp" android:max="100" android:progress="0"/>
-        <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Ready." android:textColor="@color/muted"/>
-        <TextView android:id="@+id/telemetryText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Speed: — • CPU: Standard • Thermal: — • Battery: —" android:textColor="@color/green" android:fontFamily="monospace" android:textSize="12sp"/>
-        <TextView android:id="@+id/historyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="12dp" android:text="RECENT\nNo conversions yet." android:textColor="@color/muted" android:textSize="12sp"/>
+        <Button android:id="@+id/convertButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/button_primary" android:enabled="false" android:text="CONVERT TO AMV" android:textColor="@color/text" android:minHeight="62dp" android:textAllCaps="false" android:textSize="15sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+        <Button android:id="@+id/startQueueButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_primary" android:enabled="false" android:text="CHOOSE OUTPUT FOLDER &amp; START QUEUE" android:textColor="@color/text" android:visibility="gone" android:minHeight="62dp" android:textAllCaps="false" android:textSize="15sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+        <Button android:id="@+id/cancelButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/button_selector" android:text="CANCEL" android:textColor="@color/red" android:visibility="gone" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
+        <ProgressBar android:id="@+id/progressBar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="18dp" android:layout_marginTop="10dp" android:max="100" android:progress="0" />
+        <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Ready." android:textColor="@color/muted" />
+        <TextView android:id="@+id/telemetryText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Speed: — • CPU: Standard • Thermal: — • Battery: —" android:textColor="@color/green" android:fontFamily="sans" android:textSize="12sp" android:background="@drawable/status_panel" android:padding="12dp" android:lineSpacingExtra="4dp" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:text="RECENT CONVERSIONS" android:textSize="12sp" android:textColor="@color/text" android:textStyle="bold" />
+        <TextView android:id="@+id/historyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:background="@drawable/card" android:fontFamily="monospace" android:padding="15dp" android:text="RECENT\nNo conversions yet." android:textColor="@color/muted" android:textSize="11sp" android:lineSpacingExtra="5dp" />
     </LinearLayout>
 </ScrollView>

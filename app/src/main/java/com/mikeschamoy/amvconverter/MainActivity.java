@@ -35,6 +35,16 @@ public class MainActivity extends Activity {
     private int heightOverride=0,fpsOverride=0;
     private boolean preserve43=false,playerView=true,advanced=false,queueAuto=true,usingProxy=false,generatingProxy=false,conversionActive=false;
     private int performanceMode=0;
+    private PresetEngine.FrameMode frameMode=PresetEngine.FrameMode.FIT;
+    private PresetEngine.PictureMode pictureMode=PresetEngine.PictureMode.AUTO;
+    private PresetEngine.PictureMode autoPicture=PresetEngine.PictureMode.SHARP;
+    private String autoReason="Waiting to analyze selected video";
+    private Button pictureAutoButton,pictureSharpButton,pictureSmoothButton,pictureCompareButton;
+    private TextView pictureInfo;
+    private long previewJobVersion=0;
+    private double requestedPreviewSeconds=-1;
+    private final Runnable previewRebuild=()->generateRawProxy();
+    private long activePreviewSessionId=-1;
     private boolean previewSeeking=false;
     private PresetEngine.Crop crop;
     private String latestDiagnostics="ClipAMV diagnostics unavailable.";
@@ -43,7 +53,7 @@ public class MainActivity extends Activity {
 
     private TextView stateBadge,fileText,sourceText,reasonText,outputNameText,cropText,estimateText,presetText,statusText,historyText,previewTime,queueHeader,telemetryText;
     private LinearLayout queuePanel,queueList;
-    private Button youtubeButton,movieButton,cartoonButton,portraitButton,spaceSaverButton,standardButton,qualityButton,perfStandardButton,perfFasterButton,perfMaximumButton;
+    private Button youtubeButton,movieButton,cartoonButton,portraitButton,spaceSaverButton,standardButton,qualityButton,perfStandardButton,perfFasterButton,perfMaximumButton,fitFrameButton,fillFrameButton;
     private Button[] heightButtons,fpsButtons;
     private Button full43,preserve43Button,portraitFit,portraitZoom,portraitRotate,playerViewButton,rawViewButton;
     private Button convertButton,startQueueButton,cancelButton,advancedButton,playPreviewButton,queueAutoButton,queueSameButton,queueDownloadsButton,queueFolderButton;
@@ -54,12 +64,13 @@ public class MainActivity extends Activity {
     private ImageView fallback;
     private SeekBar previewSeek;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable trimProxyRefresh=new Runnable(){@Override public void run(){if(usingProxy&&!generatingProxy)generateRawProxy();}};
+    private final Runnable trimProxyRefresh=new Runnable(){@Override public void run(){if(usingProxy)requestPreviewAt(parseTime(startTrim.getText().toString()));}};
 
     private final Runnable seekUpdater=new Runnable(){
         @Override public void run(){
             if(preview!=null&&preview.duration()>0){
-                if(!previewSeeking)previewSeek.setProgress((int)(1000.0*preview.position()/preview.duration()));
+                if(!previewSeeking)previewSeek.setProgress(source!=null&&source.durationSeconds>0?
+                        (int)Math.min(1000,1000.0*((usingProxy?proxyBaseSeconds:0)+preview.position()/1000.0)/source.durationSeconds):0);
                 if(!previewSeeking){
                     double shown=(usingProxy?proxyBaseSeconds:0)+preview.position()/1000.0;
                     previewTime.setText(fmtTime(shown));
@@ -97,6 +108,7 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         setContentView(R.layout.activity_main);
         performanceMode=Math.max(0,Math.min(2,getSharedPreferences("state",MODE_PRIVATE).getInt("performance",0)));
+        pictureMode=PresetEngine.PictureMode.values()[Math.max(0,Math.min(2,getSharedPreferences("state",MODE_PRIVATE).getInt("picture",0)))];
         bind(); setupUi(); setupPreview(); selfTest();
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},9);
@@ -114,6 +126,12 @@ public class MainActivity extends Activity {
         perfStandardButton=findViewById(R.id.perfStandardButton);
         perfFasterButton=findViewById(R.id.perfFasterButton);
         perfMaximumButton=findViewById(R.id.perfMaximumButton);
+        pictureAutoButton=findViewById(R.id.pictureAutoButton);
+        pictureSharpButton=findViewById(R.id.pictureSharpButton);
+        pictureSmoothButton=findViewById(R.id.pictureSmoothButton);
+        pictureCompareButton=findViewById(R.id.pictureCompareButton);
+        pictureInfo=findViewById(R.id.pictureInfo);
+        fitFrameButton=findViewById(R.id.fitFrameButton);fillFrameButton=findViewById(R.id.fillFrameButton);
         queuePanel=findViewById(R.id.queuePanel); queueList=findViewById(R.id.queueList); queueHeader=findViewById(R.id.queueHeader);
         queueAutoButton=findViewById(R.id.queueAutoButton); queueSameButton=findViewById(R.id.queueSameButton);
         queueDownloadsButton=findViewById(R.id.queueDownloadsButton); queueFolderButton=findViewById(R.id.queueFolderButton);
@@ -144,6 +162,12 @@ public class MainActivity extends Activity {
         perfStandardButton.setOnClickListener(v->setPerformance(0));
         perfFasterButton.setOnClickListener(v->setPerformance(1));
         perfMaximumButton.setOnClickListener(v->setPerformance(2));
+        pictureAutoButton.setOnClickListener(v->selectPicture(PresetEngine.PictureMode.AUTO));
+        pictureSharpButton.setOnClickListener(v->selectPicture(PresetEngine.PictureMode.SHARP));
+        pictureSmoothButton.setOnClickListener(v->selectPicture(PresetEngine.PictureMode.SMOOTH));
+        pictureCompareButton.setOnClickListener(v->comparePicture());
+        fitFrameButton.setOnClickListener(v->{frameMode=PresetEngine.FrameMode.FIT;refresh();});
+        fillFrameButton.setOnClickListener(v->{frameMode=PresetEngine.FrameMode.FILL;refresh();});
 
         int[] hs={216,208,200,192,184};
         for(int i=0;i<heightButtons.length;i++){final int h=hs[i];heightButtons[i].setOnClickListener(v->{heightOverride=h;refresh();});}
@@ -154,8 +178,8 @@ public class MainActivity extends Activity {
         portraitFit.setOnClickListener(v->{portraitMode=PresetEngine.PortraitMode.FIT;refresh();});
         portraitZoom.setOnClickListener(v->{portraitMode=PresetEngine.PortraitMode.ZOOM;refresh();});
         portraitRotate.setOnClickListener(v->{portraitMode=PresetEngine.PortraitMode.ROTATE;refresh();});
-        playerViewButton.setOnClickListener(v->{playerView=true;style();refreshPreview();});
-        rawViewButton.setOnClickListener(v->{playerView=false;style();refreshPreview();});
+        playerViewButton.setOnClickListener(v->{playerView=true;style();preview.setPreset(preset(),true);refreshFallbackView();});
+        rawViewButton.setOnClickListener(v->{playerView=false;style();preview.setPreset(preset(),false);refreshFallbackView();});
         findViewById(R.id.refreshPreviewButton).setOnClickListener(v->refreshPreviewSource());
         findViewById(R.id.detectBarsButton).setOnClickListener(v->detectBars());
         findViewById(R.id.clearCropButton).setOnClickListener(v->{crop=null;cropText.setText("No detected crop.");refresh();});
@@ -183,12 +207,16 @@ public class MainActivity extends Activity {
     private void setupPreview(){
         preview.setListener(new PreviewTextureView.Listener(){
             public void onReady(int w,int h,int d){
-                generatingProxy=false; fallback.setVisibility(View.GONE); preview.setVisibility(View.VISIBLE); refreshPreview();
+                generatingProxy=false; fallback.setVisibility(View.GONE); preview.setVisibility(View.VISIBLE);
+                if(source!=null)preview.setPreset(preset(),playerView); // No render scheduling from onReady.
                 if(pendingPreviewSeek>=0&&!usingProxy){preview.seekTo((int)(pendingPreviewSeek*1000));pendingPreviewSeek=-1;}
             }
+            public void onFinished(){
+                if(usingProxy&&source!=null&&!conversionActive&&source.durationSeconds>proxyBaseSeconds+9.5)
+                    requestPreviewAt(proxyBaseSeconds+9.5);
+            }
             public void onError(){
-                if(!usingProxy&&!generatingProxy)generateRawProxy();
-                else if(usingProxy&&!generatingProxy)extractFrameAt(currentPreviewSeconds());
+                if(!generatingProxy)extractFrameAt(proxyBaseSeconds);
             }
         });
         playPreviewButton.setOnClickListener(v->togglePreviewPlayback());
@@ -197,13 +225,13 @@ public class MainActivity extends Activity {
         previewSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             public void onProgressChanged(SeekBar s,int p,boolean user){
                 if(user&&preview.duration()>0){
-                    double shown=(usingProxy?proxyBaseSeconds:0)+preview.duration()*p/1000000.0;
+                    double shown=source!=null?source.durationSeconds*p/1000.0:0;
                     previewTime.setText(fmtTime(shown));
                 }
             }
             public void onStartTrackingTouch(SeekBar s){previewSeeking=true;}
             public void onStopTrackingTouch(SeekBar s){
-                if(preview.duration()>0)preview.seekTo((int)(preview.duration()*s.getProgress()/1000.0));
+                if(source!=null&&!source.image)requestPreviewAt(source.durationSeconds*s.getProgress()/1000.0);
                 previewSeeking=false;
             }
         });
@@ -327,20 +355,28 @@ public class MainActivity extends Activity {
         convertButton.setEnabled(false); statusText.setText("Inspecting source…");
         new Thread(()->{
             PresetEngine.SourceInfo info=probe(uri);
+            PictureAnalysis.Result choice=(info==null||pictureMode!=PresetEngine.PictureMode.AUTO)?null:
+                    PictureAnalysis.analyze(this,uri,info);
             runOnUiThread(()->{
                 if(gen!=sourceGeneration)return;
                 if(info==null){stateBadge.setText("WARNING");statusText.setText("Could not inspect file.");return;}
-                source=info; if(source.isPortrait())type=PresetEngine.Type.PORTRAIT;
+                source=info;
+                if(choice!=null){autoPicture=choice.mode;autoReason=choice.reason;}
+                else {autoPicture=PresetEngine.PictureMode.SHARP;autoReason="Manual processing selected";}
+                if(source.isPortrait())type=PresetEngine.Type.PORTRAIT;
                 fileText.setText((fromQueue?"Queue preview • ":"")+displayName(uri)); sourceText.setText(sourceBlock(source));
                 startTrim.setText(""); endTrim.setText(source.image?"":fmtTime(source.durationSeconds));
-                stateBadge.setText("READY"); convertButton.setEnabled(!fromQueue); preview.setVideo(uri); refresh();
+                stateBadge.setText("READY"); convertButton.setEnabled(!fromQueue);
+                preview.setEncodedPreview(false);preview.setVideo(uri);
+                findViewById(R.id.previewHint).setVisibility(View.GONE);
+                requestedPreviewSeconds=0;refresh();
             });
         }).start();
     }
 
     private PresetEngine.SourceInfo probe(Uri uri){
         String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
-        String cmd="-v error -show_entries stream=index,codec_type,codec_name,width,height,avg_frame_rate -show_entries format=duration -of default=noprint_wrappers=1 "+q(saf);
+        String cmd="-v error -show_entries stream=index,codec_type,codec_name,width,height,avg_frame_rate,sample_aspect_ratio,display_aspect_ratio:stream_side_data=rotation:stream_tags=rotate -show_entries format=duration -of default=noprint_wrappers=1 "+q(saf);
         FFprobeSession ss=FFprobeKit.execute(cmd); String out=ss.getOutput();
         try{
             PresetEngine.SourceInfo s=new PresetEngine.SourceInfo(); String ct=""; s.audioPresent=false;
@@ -350,6 +386,9 @@ public class MainActivity extends Activity {
                 else if(line.startsWith("codec_name=")){if("video".equals(ct))s.videoCodec=line.substring(11);else if("audio".equals(ct)){s.audioCodec=line.substring(11);s.audioPresent=true;}}
                 else if(line.startsWith("width=")&&s.width==0)s.width=Integer.parseInt(line.substring(6));
                 else if(line.startsWith("height=")&&s.height==0)s.height=Integer.parseInt(line.substring(7));
+                else if(line.startsWith("sample_aspect_ratio=")) {double r=line.endsWith("N/A")?0:rational(line.substring(20).replace(':','/'));if(r>0)s.sampleAspect=r;}
+                else if(line.startsWith("rotation="))s.rotation=(int)Math.round(Double.parseDouble(line.substring(9)));
+                else if(line.startsWith("TAG:rotate="))s.rotation=(int)Math.round(Double.parseDouble(line.substring(11)));
                 else if(line.startsWith("avg_frame_rate=")&&s.fps==0)s.fps=rational(line.substring(15));
                 else if(line.startsWith("duration=")&&!line.endsWith("N/A"))s.durationSeconds=Double.parseDouble(line.substring(9));
             }
@@ -360,48 +399,79 @@ public class MainActivity extends Activity {
     }
 
     private void resetPreviewState(){
-        usingProxy=false; generatingProxy=false; proxyBaseSeconds=0; pendingPreviewSeek=-1; preview.clearSource(); fallback.setImageDrawable(null); fallback.setVisibility(View.GONE); preview.setVisibility(View.VISIBLE);
+        ++previewJobVersion;handler.removeCallbacks(previewRebuild);
+        if(activePreviewSessionId>0){FFmpegKit.cancel(activePreviewSessionId);activePreviewSessionId=-1;}
+        usingProxy=false; generatingProxy=false; proxyBaseSeconds=0; requestedPreviewSeconds=-1; pendingPreviewSeek=-1; preview.clearSource();
+        findViewById(R.id.previewHint).setVisibility(View.VISIBLE); fallback.setImageDrawable(null); fallback.setVisibility(View.GONE); preview.setVisibility(View.VISIBLE);
         previewSeek.setProgress(0); previewTime.setText("0:00"); playPreviewButton.setText("▶");
         File[] cache=getCacheDir().listFiles(); if(cache!=null)for(File f:cache)if(f.getName().startsWith("clipamv_proxy_")||f.getName().startsWith("clipamv_frame_"))f.delete();
     }
 
     private void refreshPreviewSource(){
-        if(conversionActive||inputUri==null||source==null)return;
-        fallback.setVisibility(View.GONE); preview.setVisibility(View.VISIBLE);
-        if(source.image){extractFrameAt(0);return;}
-        if(usingProxy)generateRawProxy();
-        else{pendingPreviewSeek=currentPreviewSeconds();preview.clearSource();preview.setVideo(inputUri);statusText.setText("Native preview refreshed.");}
+        if(source==null||conversionActive)return;
+        requestPreviewAt(Math.max(0,usingProxy?proxyBaseSeconds+preview.position()/1000.0:0));
     }
-
+    private void requestPreviewAt(double second){
+        if(source==null||conversionActive)return;
+        requestedPreviewSeconds=Math.max(0,Math.min(Math.max(0,source.durationSeconds-0.05),second));
+        handler.removeCallbacks(previewRebuild);
+        handler.postDelayed(previewRebuild,300);
+    }
     private void generateRawProxy(){
-        if(conversionActive||inputUri==null||source==null||source.image||generatingProxy)return;
-        final long gen=sourceGeneration; generatingProxy=true; stateBadge.setText("PREVIEW"); statusText.setText("Building compatibility preview…");
-        String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); double ss=Math.max(0,currentPreviewSeconds());
-        File out=new File(getCacheDir(),"clipamv_proxy_"+gen+".mp4");
-        String cmd="-y -ss "+f3(ss)+" -i "+q(saf)+" -t 10 -an -c:v libx264 -preset ultrafast -crf 30 -pix_fmt yuv420p "+q(out.getAbsolutePath());
-        FFmpegKit.executeAsync(cmd,session->runOnUiThread(()->{
-            if(gen!=sourceGeneration){generatingProxy=false;return;}
-            generatingProxy=false;
-            if(ReturnCode.isSuccess(session.getReturnCode())){usingProxy=true;proxyBaseSeconds=ss;preview.setVideo(Uri.fromFile(out));statusText.setText("Compatibility preview loaded • controls remain live.");}
-            else extractFrameAt(ss);
-            stateBadge.setText("READY");
+        if(conversionActive||source==null||inputUri==null)return;
+        if(source.image){extractFrameAt(0);return;}
+        long job=++previewJobVersion,gen=sourceGeneration;
+        if(activePreviewSessionId>0)FFmpegKit.cancel(activePreviewSessionId);
+        generatingProxy=true;
+        String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri);
+        double ss=requestedPreviewSeconds>=0?requestedPreviewSeconds:0;
+        PresetEngine.Preset selected=preset();
+        File out=new File(getCacheDir(),"clipamv_proxy_"+gen+"_"+job+".mp4");
+        stateBadge.setText("PREVIEW");statusText.setText("Rendering exact 320×240 framing preview…");
+        // The preview goes through EXACTLY the same -vf chain as the AMV output.
+        String cmd="-y -ss "+f3(ss)+" -autorotate -i "+q(saf)+" -t 10 -vf "+q(selected.filter)+
+                " -map 0:v:0 -map 0:a:0? -r 15 -c:v libx264 -preset ultrafast -crf 33 -pix_fmt yuv420p "+
+                "-c:a aac -b:a 64k "+q(out.getAbsolutePath());
+        FFmpegSession rendering=FFmpegKit.executeAsync(cmd,session->runOnUiThread(()->{
+            if(job!=previewJobVersion||gen!=sourceGeneration){out.delete();return;}
+            generatingProxy=false;stateBadge.setText("READY");activePreviewSessionId=-1;
+            if(ReturnCode.isSuccess(session.getReturnCode())){
+                usingProxy=true;proxyBaseSeconds=ss;
+                preview.setEncodedPreview(true);
+                fallback.setVisibility(View.GONE);preview.setVisibility(View.VISIBLE);
+                preview.setVideo(Uri.fromFile(out));
+                preview.setPreset(selected,playerView);
+                statusText.setText("Exact filtered preview • Player View simulates calibrated Gen 2 viewport.");
+            }else{
+                statusText.setText("Video preview failed; displaying filtered frame.");
+                extractFrameAt(ss);
+            }
         }));
+        activePreviewSessionId=rendering.getSessionId();
     }
-
     private void extractFrameAt(double sec){
         if(conversionActive||inputUri==null||source==null)return;
-        final long gen=sourceGeneration; String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); File out=new File(getCacheDir(),"clipamv_frame_"+gen+".jpg");
+        final long gen=sourceGeneration,job=previewJobVersion; String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); File out=new File(getCacheDir(),"clipamv_frame_"+gen+"_"+job+".jpg");
         String cmd="-y "+(!source.image?"-ss "+f3(sec)+" ":"")+"-i "+q(saf)+" -frames:v 1 -vf "+q(preset().filter)+" -q:v 2 "+q(out.getAbsolutePath());
         FFmpegKit.executeAsync(cmd,session->runOnUiThread(()->{
-            if(gen!=sourceGeneration)return; Bitmap b=BitmapFactory.decodeFile(out.getAbsolutePath());
-            if(b!=null){fallback.setImageBitmap(b);fallback.setVisibility(View.VISIBLE);preview.setVisibility(View.GONE);statusText.setText("Static compatibility frame loaded.");}
+            if(gen!=sourceGeneration||job!=previewJobVersion)return; Bitmap b=BitmapFactory.decodeFile(out.getAbsolutePath());
+            if(b!=null){fallback.setImageBitmap(playerView?playerBitmap(b):b);fallback.setVisibility(View.VISIBLE);preview.setVisibility(View.GONE);statusText.setText("Exact filtered frame loaded.");}
             else statusText.setText("Preview unavailable."); stateBadge.setText("READY");
         }));
     }
 
+    private Bitmap playerBitmap(Bitmap b){
+        if(b.getWidth()!=320||b.getHeight()!=240)return b;
+        Bitmap clipped=Bitmap.createBitmap(b,PresetEngine.PLAYER_VIEW_X,0,PresetEngine.PLAYER_VIEW_WIDTH,240);
+        return Bitmap.createScaledBitmap(clipped,320,240,true);
+    }
+    private void refreshFallbackView(){
+        if(fallback.getVisibility()==View.VISIBLE&&source!=null)extractFrameAt(proxyBaseSeconds);
+    }
     private double currentPreviewSeconds(){double s=parseTime(startTrim.getText().toString());return s>0?s:(source==null?0:Math.max(0,Math.min(source.durationSeconds/2,source.durationSeconds-1)));}
 
     private void detectBars(){
+        if(queuePanel.getVisibility()==View.VISIBLE){statusText.setText("Queue uses uncropped fit for each file; bar detection applies to single files only.");return;}
         if(conversionActive||inputUri==null||source==null||source.image)return; final long gen=sourceGeneration; statusText.setText("Detecting black bars…");
         double ss=Math.max(0,source.durationSeconds/2-4); String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); final StringBuilder logs=new StringBuilder();
         FFmpegKit.executeAsync("-ss "+f3(ss)+" -i "+q(saf)+" -t 8 -vf cropdetect=24:16:0 -an -f null -",done->runOnUiThread(()->{
@@ -412,19 +482,89 @@ public class MainActivity extends Activity {
         }),log->logs.append(log.getMessage()).append('\n'),stats->{});
     }
 
-    private PresetEngine.Preset preset(){return PresetEngine.choose(source,type,mode,heightOverride,fpsOverride,preserve43,portraitMode,crop);}
+    private PresetEngine.PictureMode effectivePicture(){return pictureMode==PresetEngine.PictureMode.AUTO?autoPicture:pictureMode;}
+    private PresetEngine.Preset preset(){return PresetEngine.choose(source,type,mode,heightOverride,fpsOverride,preserve43,portraitMode,crop,frameMode,effectivePicture());}
+    private void selectPicture(PresetEngine.PictureMode which){
+        pictureMode=which;
+        getSharedPreferences("state",MODE_PRIVATE).edit().putInt("picture",which.ordinal()).apply();
+        if(which==PresetEngine.PictureMode.AUTO&&source!=null&&!conversionActive){
+            final long gen=sourceGeneration; final Uri uri=inputUri; final PresetEngine.SourceInfo info=source;
+            style();pictureInfo.setText("Auto • analyzing source frames…");
+            new Thread(()->{
+                PictureAnalysis.Result r=PictureAnalysis.analyze(this,uri,info);
+                runOnUiThread(()->{if(gen==sourceGeneration&&pictureMode==PresetEngine.PictureMode.AUTO&&!conversionActive){
+                    autoPicture=r.mode;autoReason=r.reason;refresh();
+                }});
+            }).start();
+            return; // Don't render a preview in parallel with picture analysis.
+        }
+        style();refresh();
+    }
+    private void comparePicture(){
+        if(inputUri==null||source==null||conversionActive){statusText.setText("Choose a video before comparing.");return;}
+        final long gen=sourceGeneration;
+        final Uri uri=inputUri;
+        final double pos=Math.max(0,usingProxy?proxyBaseSeconds+preview.position()/1000.0:currentPreviewSeconds());
+        final PresetEngine.SourceInfo info=source;
+        final PresetEngine.Type t=type;
+        final PresetEngine.Mode m=mode;
+        final int hh=heightOverride,ff=fpsOverride;
+        final boolean p43=preserve43,view=playerView;
+        final PresetEngine.PortraitMode portrait=portraitMode;
+        final PresetEngine.Crop c=crop;
+        final PresetEngine.FrameMode frame=frameMode;
+        pictureCompareButton.setEnabled(false);
+        statusText.setText("Rendering Sharp and Smooth from the same frame…");
+        new Thread(()->{
+            Bitmap[] images=new Bitmap[2];
+            String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
+            for(int i=0;i<2;i++){
+                PresetEngine.PictureMode pm=i==0?PresetEngine.PictureMode.SHARP:PresetEngine.PictureMode.SMOOTH;
+                PresetEngine.Preset selected=PresetEngine.choose(info,t,m,hh,ff,p43,portrait,c,frame,pm);
+                File out=new File(getCacheDir(),"clipamv_compare_"+gen+"_"+i+".png");
+                String cmd="-y "+(!info.image?"-ss "+f3(pos)+" ":"")+"-autorotate -i "+q(saf)+
+                    " -frames:v 1 -vf "+q(selected.filter)+" -an "+q(out.getAbsolutePath());
+                FFmpegSession render=FFmpegKit.execute(cmd);
+                if(ReturnCode.isSuccess(render.getReturnCode()))images[i]=BitmapFactory.decodeFile(out.getAbsolutePath());
+                out.delete();
+            }
+            runOnUiThread(()->{
+                pictureCompareButton.setEnabled(true);
+                if(gen!=sourceGeneration||conversionActive)return;
+                if(images[0]==null||images[1]==null){statusText.setText("Comparison failed. Try Refresh Preview.");return;}
+                LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.HORIZONTAL);panel.setPadding(8,12,8,12);
+                for(int i=0;i<2;i++){
+                    LinearLayout side=new LinearLayout(this);side.setOrientation(LinearLayout.VERTICAL);
+                    side.setPadding(4,0,4,0);
+                    TextView title=new TextView(this);title.setText(i==0?"SHARP • LANCZOS":"SMOOTH • BICUBIC");title.setTextSize(11);
+                    ImageView img=new ImageView(this);img.setAdjustViewBounds(true);img.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                    Bitmap bmp=view?playerBitmap(images[i]):images[i];img.setImageBitmap(bmp);
+                    side.addView(title);side.addView(img,new LinearLayout.LayoutParams(-1,-2));
+                    panel.addView(side,new LinearLayout.LayoutParams(0,-2,1));
+                }
+                new android.app.AlertDialog.Builder(this)
+                    .setTitle("Same frame • player preview")
+                    .setMessage("Compare scaling only. Actual AMV compression and MP3 screen may differ slightly.")
+                    .setView(panel)
+                    .setPositiveButton("Use Sharp",(d,w)->selectPicture(PresetEngine.PictureMode.SHARP))
+                    .setNegativeButton("Use Smooth",(d,w)->selectPicture(PresetEngine.PictureMode.SMOOTH))
+                    .setNeutralButton("Close",(d,w)->{})
+                    .show();
+                statusText.setText("Comparison rendered. Choose your preferred processing.");
+            });
+        }).start();
+    }
 
     private void refresh(){
         if(source==null)return; PresetEngine.Preset p=preset();
-        String picture=p.narrowFit?p.contentWidth+"×"+p.visibleHeight+" centered": "320×"+p.visibleHeight;
-        reasonText.setText(PresetEngine.explain(source,type,p)+" • "+picture+" • "+((240-p.visibleHeight)/2)+" px bars");
+        reasonText.setText(PresetEngine.explain(source,type,p)+" • calibrated player viewport • "+frameMode.name()+" • 320×240 AMV");
         outputNameText.setText("OUTPUT\n"+FileNameCleaner.clean(displayName(inputUri),type,source.image));
         presetText.setText("Preset Engine "+PresetEngine.PRESET_VERSION+"\n"+p.name+"\n"+p.filter+(p.q>0?"\nq="+p.q:""));
         latestDiagnostics=diagnostics(p); style(); refreshPreview(); refreshEstimate(); refreshQueueEstimate(); if(queueInfo.size()==queueUris.size()&&!queueInfo.isEmpty())rebuildQueueRows();
         if(fallback.getVisibility()==View.VISIBLE)extractFrameAt(currentPreviewSeconds());
     }
 
-    private void refreshPreview(){if(source!=null&&preview.getVisibility()==View.VISIBLE)preview.setPreset(preset(),playerView);}
+    private void refreshPreview(){if(source!=null&&!conversionActive){preview.setPreset(preset(),playerView);requestPreviewAt(usingProxy?proxyBaseSeconds+preview.position()/1000.0:0);}}
 
     private void refreshEstimate(){
         if(source==null)return; PresetEngine.Preset p=preset(); double st=parseTime(startTrim.getText().toString()),en=parseTime(endTrim.getText().toString());
@@ -450,6 +590,13 @@ public class MainActivity extends Activity {
         Button[] content={youtubeButton,movieButton,cartoonButton,portraitButton}; for(Button b:content)b.setSelected(false); content[type.ordinal()].setSelected(true);
         spaceSaverButton.setSelected(mode==PresetEngine.Mode.SPACE_SAVER); standardButton.setSelected(mode==PresetEngine.Mode.STANDARD); qualityButton.setSelected(mode==PresetEngine.Mode.QUALITY);
         perfStandardButton.setSelected(performanceMode==0);perfFasterButton.setSelected(performanceMode==1);perfMaximumButton.setSelected(performanceMode==2);
+        fitFrameButton.setSelected(frameMode==PresetEngine.FrameMode.FIT);fillFrameButton.setSelected(frameMode==PresetEngine.FrameMode.FILL);
+        pictureAutoButton.setSelected(pictureMode==PresetEngine.PictureMode.AUTO);
+        pictureSharpButton.setSelected(pictureMode==PresetEngine.PictureMode.SHARP);
+        pictureSmoothButton.setSelected(pictureMode==PresetEngine.PictureMode.SMOOTH);
+        pictureInfo.setText(pictureMode==PresetEngine.PictureMode.AUTO?
+            "AUTO → "+autoPicture.name()+" • "+autoReason:
+            pictureMode==PresetEngine.PictureMode.SHARP?"SHARP • Lanczos edge detail":"SMOOTH • Bicubic gentle scaling");
         int[] hs={216,208,200,192,184};for(int i=0;i<heightButtons.length;i++)heightButtons[i].setSelected(heightOverride==hs[i]);
         int[] fs={15,25,30,0};for(int i=0;i<fpsButtons.length;i++)fpsButtons[i].setSelected(fpsOverride==fs[i]);
         full43.setSelected(!preserve43);preserve43Button.setSelected(preserve43);portraitFit.setSelected(portraitMode==PresetEngine.PortraitMode.FIT);portraitZoom.setSelected(portraitMode==PresetEngine.PortraitMode.ZOOM);portraitRotate.setSelected(portraitMode==PresetEngine.PortraitMode.ROTATE);
@@ -482,6 +629,7 @@ public class MainActivity extends Activity {
         if(queueUris.isEmpty())return; Intent i=baseServiceIntent(); ArrayList<String> arr=new ArrayList<>();for(Uri u:queueUris)arr.add(u.toString());
         i.putStringArrayListExtra(ConversionService.EXTRA_INPUTS,arr); if(tree!=null)i.putExtra(ConversionService.EXTRA_TREE,tree.toString());
         i.putExtra(ConversionService.EXTRA_DOWNLOADS,downloads); i.putExtra(ConversionService.EXTRA_QUEUE_AUTO,queueAuto);
+        i.removeExtra("manualCropW");i.removeExtra("manualCropH");i.removeExtra("manualCropX");i.removeExtra("manualCropY");
         i.putExtra(ConversionService.EXTRA_START,0.0);i.putExtra(ConversionService.EXTRA_END,0.0);i.putExtra(ConversionService.EXTRA_TEST,false);
         startServiceCompat(i);
     }
@@ -489,12 +637,16 @@ public class MainActivity extends Activity {
     private Intent baseServiceIntent(){
         Intent i=new Intent(this,ConversionService.class); i.putExtra(ConversionService.EXTRA_TYPE,type.ordinal());i.putExtra(ConversionService.EXTRA_MODE,mode.ordinal());
         i.putExtra(ConversionService.EXTRA_PERFORMANCE,performanceMode);
-        i.putExtra(ConversionService.EXTRA_HEIGHT,heightOverride);i.putExtra(ConversionService.EXTRA_FPS,fpsOverride);i.putExtra(ConversionService.EXTRA_43,preserve43);i.putExtra(ConversionService.EXTRA_PORTRAIT,portraitMode.ordinal());i.putExtra(ConversionService.EXTRA_AUTOBARS,true);
+        i.putExtra(ConversionService.EXTRA_FRAME_MODE,frameMode.ordinal());
+        i.putExtra(ConversionService.EXTRA_PICTURE_MODE,pictureMode.ordinal());
+        if(queueUris.isEmpty()&&crop!=null){i.putExtra("manualCropW",crop.w);i.putExtra("manualCropH",crop.h);i.putExtra("manualCropX",crop.x);i.putExtra("manualCropY",crop.y);}
+        i.putExtra(ConversionService.EXTRA_HEIGHT,heightOverride);i.putExtra(ConversionService.EXTRA_FPS,fpsOverride);i.putExtra(ConversionService.EXTRA_43,preserve43);i.putExtra(ConversionService.EXTRA_PORTRAIT,portraitMode.ordinal());i.putExtra(ConversionService.EXTRA_AUTOBARS,false);
         i.putExtra(ConversionService.EXTRA_START,parseTime(startTrim.getText().toString()));i.putExtra(ConversionService.EXTRA_END,parseTime(endTrim.getText().toString()));i.putExtra(ConversionService.EXTRA_TEST,testClip.isChecked());return i;
     }
 
     private void startServiceCompat(Intent i){
-        conversionActive=true;queueGeneration++;
+        conversionActive=true;queueGeneration++;previewJobVersion++;handler.removeCallbacks(previewRebuild);
+        if(activePreviewSessionId>0){FFmpegKit.cancel(activePreviewSessionId);activePreviewSessionId=-1;}
         if(preview.isPlaying())preview.toggle();
         playPreviewButton.setText("▶");
         convertButton.setEnabled(false);queueDownloadsButton.setEnabled(false);queueFolderButton.setEnabled(false);
@@ -511,10 +663,10 @@ public class MainActivity extends Activity {
     }
     private void cancel(){Intent i=new Intent(this,ConversionService.class);i.setAction(ConversionService.ACTION_CANCEL);startService(i);}
     private void toggleAdvanced(){advanced=!advanced;findViewById(R.id.advancedPanel).setVisibility(advanced?View.VISIBLE:View.GONE);advancedButton.setText(advanced?"ADVANCED ▴":"ADVANCED ▾");}
-    private void resetDefaults(){mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;queueAuto=true;setPerformance(0);refresh();}
+    private void resetDefaults(){mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;frameMode=PresetEngine.FrameMode.FIT;pictureMode=PresetEngine.PictureMode.AUTO;getSharedPreferences("state",MODE_PRIVATE).edit().putInt("picture",0).apply();queueAuto=true;setPerformance(0);refresh();}
 
     private String sourceBlock(PresetEngine.SourceInfo s){return "SOURCE\n"+s.width+"×"+s.height+"\n"+String.format(Locale.US,"%.3f fps",s.fps)+"\n"+String.format(Locale.US,"%.2f:1",s.ratio())+"\n"+(s.image?"IMAGE":fmtTime(s.durationSeconds))+"\nInput: "+human(s.inputBytes);}
-    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.5\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+type+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\n";}
+    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.6\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+type+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\n";}
     private void loadHistory(){String h=getSharedPreferences("history",MODE_PRIVATE).getString("items","");historyText.setText("RECENT\n"+(h.isEmpty()?"No conversions yet.":h));}
     private void takePerm(Uri uri,int flags){int f=flags&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);try{getContentResolver().takePersistableUriPermission(uri,f);}catch(Exception ignored){}}
     private String displayName(Uri uri){try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "media";}
