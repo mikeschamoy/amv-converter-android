@@ -32,6 +32,7 @@ public class ConversionService extends Service {
     private volatile long currentSessionId=-1;
     private volatile int performanceMode=0;
     private volatile long lastProgressUpdateMs=0;
+    private String lastFailureReason="";
     private PowerManager.WakeLock wakeLock;
 
     @Override public void onCreate(){super.onCreate();createChannel();}
@@ -48,11 +49,25 @@ public class ConversionService extends Service {
         lastProgressUpdateMs=0;
         acquireWake();startFg("Preparing…",0);
         getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",true).apply();
-        new Thread(()->runJobs(intent)).start();
+        new Thread(()->{
+            try{runJobs(intent);}
+            catch(Exception e){
+                String reason="Unexpected error: "+e.getClass().getSimpleName()+
+                    (e.getMessage()==null?"":": "+e.getMessage());
+                if(reason.length()>160)reason=reason.substring(0,160);
+                getSharedPreferences("state",MODE_PRIVATE).edit()
+                    .putBoolean("jobActive",false).putString("lastFfmpegReason",reason).apply();
+                addHistory("✕ "+reason);
+                update(0,1,0,0,0,"ClipAMV • "+reason,true);
+                releaseWake();stopForeground(true);
+                notifyDone("ClipAMV • Conversion failed",reason);stopSelf();
+            }
+        }).start();
         return START_NOT_STICKY;
     }
 
     private void runJobs(Intent intent){
+        lastFailureReason="";
         ArrayList<String> inputs=intent.getStringArrayListExtra(EXTRA_INPUTS);
         if(inputs==null){
             inputs=new ArrayList<>();
@@ -84,7 +99,7 @@ public class ConversionService extends Service {
             update(i,total,0,0,0,"Inspecting "+original,false);
 
             PresetEngine.SourceInfo info=inspect(in);
-            if(info==null){fail++;addHistory("✕ "+original+" — inspect failed");continue;}
+            if(info==null){fail++;lastFailureReason="Could not inspect "+original;addHistory("✕ "+original+" — inspect failed");continue;}
 
             PresetEngine.Crop crop=autoBars&&!info.image?detectBars(in,info):null;
             if(total==1&&intent.hasExtra("manualCropW")){crop=new PresetEngine.Crop(
@@ -104,15 +119,22 @@ public class ConversionService extends Service {
             Uri out;
             if(total==1&&singleOut!=null)out=Uri.parse(singleOut);
             else if(downloads)out=createInDownloads(outName,info.image);
-            else out=createInTree(Uri.parse(tree),outName,info.image);
+            else if(tree!=null)out=createInTree(Uri.parse(tree),outName,info.image);
+            else out=null;
 
-            if(out==null){fail++;addHistory("✕ "+outName+" — output create failed");continue;}
+            if(out==null){fail++;lastFailureReason="Could not create output; select a writable folder";addHistory("✕ "+outName+" — output create failed");continue;}
 
             double runtime=test?30:(end>start&&end>0?end-start:Math.max(0,info.durationSeconds-start));
             boolean ok=convertOne(in,out,info,preset,start,end,test,i,total,outName,runtime);
             if(!ok){fail++;continue;}
 
             boolean verified=verify(out,info.image,runtime);
+            if(!verified){
+                fail++;lastFailureReason="Output verification failed: "+outName;
+                addHistory("✕ "+outName+" — invalid output");
+                try{DocumentsContract.deleteDocument(getContentResolver(),out);}catch(Exception ignored){}
+                continue;
+            }
             boolean seekOk=info.image || verifySeek(out,runtime);
             long bytes=querySize(out);
             completed++; lastName=displayName(out); lastBytes=bytes; totalBytes+=Math.max(0,bytes);
@@ -130,12 +152,13 @@ public class ConversionService extends Service {
             msg=human(lastBytes)+" • Ready";
         }else if(total==1){
             title="ClipAMV • Conversion failed";
-            msg="No output was completed";
+            msg=lastFailureReason.isEmpty()?"No output was completed":lastFailureReason;
         }else{
             title=fail==0?"✓ Queue complete • "+completed+"/"+total:"Queue finished • "+completed+"/"+total;
             msg="Last: "+(lastName.isEmpty()?"None":lastName)+" • "+human(totalBytes)+(fail>0?" • "+fail+" failed":"");
         }
-        update(total,total,100,0,0,title+" • "+msg,true);
+        int finalPercent=total>0?(int)Math.round(100.0*completed/total):0;
+        update(0,1,finalPercent,0,0,title+" • "+msg,true);
         getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
         releaseWake();stopForeground(true);
         notifyDone(title,msg);stopSelf();
@@ -143,16 +166,30 @@ public class ConversionService extends Service {
 
     private boolean convertOne(Uri in,Uri out,PresetEngine.SourceInfo info,PresetEngine.Preset preset,
                                double start,double end,boolean test,int index,int total,String outName,double runtime){
-        String inSaf=FFmpegKitConfig.getSafParameterForRead(this,in);
-        String outSaf=FFmpegKitConfig.getSafParameterForWrite(this,out);
+        String inSaf,outSaf;
+        try{
+            inSaf=FFmpegKitConfig.getSafParameterForRead(this,in);
+            outSaf=FFmpegKitConfig.getSafParameterForWrite(this,out);
+        }catch(Exception e){
+            lastFailureReason="Unable to open media output: "+e.getClass().getSimpleName();
+            addHistory("✕ "+outName+" — "+lastFailureReason);
+            try{DocumentsContract.deleteDocument(getContentResolver(),out);}catch(Exception ignored){}
+            return false;
+        }
         String cmd=info.image?PresetEngine.buildImageCommand(inSaf,outSaf,preset):
                 PresetEngine.buildVideoCommand(inSaf,outSaf,preset,start,end,test,performanceMode);
 
         CountDownLatch latch=new CountDownLatch(1);
         final boolean[] ok={false};
+        final StringBuilder ffmpegErrors=new StringBuilder();
         FFmpegSession session=FFmpegKit.executeAsync(cmd,done->{
             ok[0]=ReturnCode.isSuccess(done.getReturnCode());latch.countDown();
-        },log->{},stats->{
+        },log->{
+            synchronized(ffmpegErrors){
+                ffmpegErrors.append(log.getMessage()).append('\n');
+                if(ffmpegErrors.length()>16000)ffmpegErrors.delete(0,ffmpegErrors.length()-16000);
+            }
+        },stats->{
             if(cancelRequested)return;
             long now=SystemClock.elapsedRealtime();
             long interval=performanceMode==2?1600:performanceMode==1?900:400;
@@ -168,12 +205,36 @@ public class ConversionService extends Service {
         try{latch.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}
         currentSessionId=-1;
         if(!ok[0]){
-            addHistory("✕ "+outName+" — conversion failed");
+            String details;
+            synchronized(ffmpegErrors){details=ffmpegErrors.toString();}
+            String code=session.getReturnCode()==null?"?":session.getReturnCode().toString();
+            lastFailureReason=describeFfmpegFailure(details,code);
+            getSharedPreferences("state",MODE_PRIVATE).edit()
+                .putString("lastFfmpegReason",lastFailureReason)
+                .putString("lastFfmpegLog",details).apply();
+            addHistory("✕ "+outName+" — "+lastFailureReason);
             try{DocumentsContract.deleteDocument(getContentResolver(),out);}catch(Exception ignored){}
         }
         return ok[0];
     }
 
+    private static String describeFfmpegFailure(String log,String code){
+        String reason="";int best=-1;
+        for(String raw:log.split("\\r?\\n")){
+            String line=raw.trim();
+            if(line.isEmpty())continue;
+            String low=line.toLowerCase(Locale.US);
+            int score=low.contains("unknown encoder")||low.contains("unable to choose an output format")?10:
+                low.contains("invalid argument")||low.contains("no such filter")||low.contains("unsupported")?8:
+                low.contains("could not")||low.contains("failed to")||low.contains("error while")?7:
+                low.contains("error")||low.contains("failed")?5:0;
+            if(score>best&&score>0){reason=line;best=score;}
+        }
+        if(reason.isEmpty())reason="FFmpeg failed (code "+code+")";
+        reason=reason.replaceAll("saf:[^ ]+","[media]")
+                     .replaceAll("/storage/[^ ]+","[file]");
+        return reason.length()>160?reason.substring(0,157)+"…":reason;
+    }
     private PresetEngine.SourceInfo inspect(Uri uri){
         String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
         String cmd="-v error -show_entries stream=index,codec_type,codec_name,width,height,avg_frame_rate,sample_aspect_ratio,display_aspect_ratio:stream_side_data=rotation:stream_tags=rotate "+

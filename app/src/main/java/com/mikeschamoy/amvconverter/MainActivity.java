@@ -68,7 +68,7 @@ public class MainActivity extends Activity {
 
     private final Runnable seekUpdater=new Runnable(){
         @Override public void run(){
-            if(preview!=null&&preview.duration()>0){
+            if(preview!=null&&usingProxy&&preview.duration()>0){
                 if(!previewSeeking)previewSeek.setProgress(source!=null&&source.durationSeconds>0?
                         (int)Math.min(1000,1000.0*((usingProxy?proxyBaseSeconds:0)+preview.position()/1000.0)/source.durationSeconds):0);
                 if(!previewSeeking){
@@ -224,21 +224,31 @@ public class MainActivity extends Activity {
         preview.setOnClickListener(v->togglePreviewPlayback());
         previewSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             public void onProgressChanged(SeekBar s,int p,boolean user){
-                if(user&&preview.duration()>0){
-                    double shown=source!=null?source.durationSeconds*p/1000.0:0;
+                if(user&&source!=null&&!source.image){
+                    double shown=source.durationSeconds*p/1000.0;
                     previewTime.setText(fmtTime(shown));
                 }
             }
             public void onStartTrackingTouch(SeekBar s){previewSeeking=true;}
             public void onStopTrackingTouch(SeekBar s){
-                if(source!=null&&!source.image)requestPreviewAt(source.durationSeconds*s.getProgress()/1000.0);
+                if(source!=null&&!source.image){
+                    double target=source.durationSeconds*s.getProgress()/1000.0;
+                    previewTime.setText(fmtTime(target));
+                    statusText.setText("Rendering preview from "+fmtTime(target)+"…");
+                    requestPreviewAt(target);
+                }
                 previewSeeking=false;
             }
         });
     }
 
     private void togglePreviewPlayback(){
-        if(preview==null||preview.duration()<=0)return;
+        if(preview==null||!usingProxy||preview.duration()<=0){
+            if(source!=null&&!source.image&&!conversionActive&&!generatingProxy)
+                requestPreviewAt(currentPreviewSeconds());
+            statusText.setText("Preparing playable preview…");
+            return;
+        }
         preview.toggle();
         boolean playing=preview.isPlaying();
         playPreviewButton.setText(playing?"❚❚":"▶");
@@ -292,7 +302,11 @@ public class MainActivity extends Activity {
         }else if(req==PICK_OUTPUT){takePerm(uri,data.getFlags());startSingle(uri);}
         else if(req==PICK_TREE){takePerm(uri,data.getFlags());startQueue(uri,false);}
         else if(req==SAVE_DIAG){
-            try(OutputStream os=getContentResolver().openOutputStream(uri)){if(os!=null)os.write(latestDiagnostics.getBytes());statusText.setText("Diagnostics saved.");}
+            try(OutputStream os=getContentResolver().openOutputStream(uri)){if(os!=null)os.write((latestDiagnostics+"\nLast FFmpeg error: "+
+                        getSharedPreferences("state",MODE_PRIVATE).getString("lastFfmpegReason","none")+
+                        "\n\nFFmpeg error log:\n"+
+                        getSharedPreferences("state",MODE_PRIVATE).getString("lastFfmpegLog","")).getBytes());
+                        statusText.setText("Diagnostics saved.");}
             catch(Exception e){statusText.setText("Could not save diagnostics.");}
         }
     }
@@ -413,7 +427,7 @@ public class MainActivity extends Activity {
     }
     private void requestPreviewAt(double second){
         if(source==null||conversionActive)return;
-        requestedPreviewSeconds=Math.max(0,Math.min(Math.max(0,source.durationSeconds-0.05),second));
+        requestedPreviewSeconds=Math.max(0,Math.min(Math.max(0,source.durationSeconds-1.0),second));
         handler.removeCallbacks(previewRebuild);
         handler.postDelayed(previewRebuild,300);
     }
@@ -430,8 +444,8 @@ public class MainActivity extends Activity {
         stateBadge.setText("PREVIEW");statusText.setText("Rendering exact 320×240 framing preview…");
         // The preview goes through EXACTLY the same -vf chain as the AMV output.
         String cmd="-y -ss "+f3(ss)+" -autorotate -i "+q(saf)+" -t 10 -vf "+q(selected.filter)+
-                " -map 0:v:0 -map 0:a:0? -r 15 -c:v libx264 -preset ultrafast -crf 33 -pix_fmt yuv420p "+
-                "-c:a aac -b:a 64k "+q(out.getAbsolutePath());
+                " -map 0:v:0 -map 0:a:0? -r 15 -c:v mpeg4 -q:v 5 -pix_fmt yuv420p "+
+                "-c:a aac -b:a 64k -movflags +faststart "+q(out.getAbsolutePath());
         FFmpegSession rendering=FFmpegKit.executeAsync(cmd,session->runOnUiThread(()->{
             if(job!=previewJobVersion||gen!=sourceGeneration){out.delete();return;}
             generatingProxy=false;stateBadge.setText("READY");activePreviewSessionId=-1;

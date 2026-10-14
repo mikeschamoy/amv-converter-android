@@ -2,7 +2,7 @@ package com.mikeschamoy.amvconverter;
 import java.util.Locale;
 
 public final class PresetEngine {
-    public static final String PRESET_VERSION="4.0";
+    public static final String PRESET_VERSION="4.1";
     public enum Type { YOUTUBE, MOVIE_SHOW, CARTOON, PORTRAIT }
     public enum Mode { SPACE_SAVER, STANDARD, QUALITY }
     public enum FrameMode { FIT, FILL }
@@ -98,13 +98,13 @@ public final class PresetEngine {
         // FFmpeg auto-applies container rotation at decode. Optional ROTATE adds 90 degrees.
         initial+="scale=w='max(2,2*floor(iw*sar/2))':h=ih:flags=bicubic,setsar=1,";
         if(rotate)initial+="transpose=1,";
-        String rescale="scale=320:"+h+":force_original_aspect_ratio="+(zoom?"increase":"decrease")+
+        // Directly scale into the calibrated visible 256-column viewport.
+        // The picture is centered at encoded X=192, the viewport midpoint.
+        // FIT never crops content; FILL crops uniformly around the center.
+        String rescale="scale=256:"+h+":force_original_aspect_ratio="+(zoom?"increase":"decrease")+
                 ":force_divisible_by=2:flags="+resize+",";
-        if(zoom)rescale+="crop=320:"+h+":x='(iw-ow)/2':y='(ih-oh)/2',";
-        // Player shows encoded x=64..319 as its 320-wide image. Compress x to 80% and
-        // center inside that calibrated 256-pixel viewport, never outside the visible area.
-        rescale+="scale=w='max(2,2*floor(iw*0.4))':h=ih:flags="+resize+","+
-                "pad=320:240:x='(ow-iw)/2+32':y='(oh-ih)/2':color=black,setsar=1";
+        if(zoom)rescale+="crop=256:"+h+":x='(iw-ow)/2':y='(ih-oh)/2',";
+        rescale+="pad=320:240:x='(ow-iw)/2+32':y='(oh-ih)/2':color=black,setsar=1";
         p.filter=initial+rescale;
         String label=portrait?"PORTRAIT":fourThree?"4:3":type==Type.YOUTUBE?"YT":type==Type.CARTOON?"CARTOON":"MOVIE";
         p.name=label+" "+h+" "+(zoom?"FILL":"FIT")+" - "+p.outputFps;
@@ -127,11 +127,11 @@ public final class PresetEngine {
         else if(performance==2)c.append("-threads 0 ");
         if(p.q>0)c.append("-q:v ").append(p.q).append(" -qmin ").append(p.qmin).append(" ");
         c.append("-c:a adpcm_ima_amv -ac 1 -ar 22050 -block_size ").append(p.blockSize).append(" -avoid_negative_ts make_zero ");
-        c.append(q(out));return c.toString();
+        c.append("-f amv ").append(q(out));return c.toString();
     }
 
     public static String buildImageCommand(String in,String out,Preset p){
-        return "-y -i "+q(in)+" -vf "+q(p.filter)+" -frames:v 1 -q:v 2 -pix_fmt yuvj420p "+q(out);
+        return "-y -i "+q(in)+" -vf "+q(p.filter)+" -frames:v 1 -q:v 2 -pix_fmt yuvj420p -f image2 -update 1 "+q(out);
     }
 
     public static long estimateBytes(SourceInfo s,Preset p,double runtime){
