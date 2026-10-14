@@ -7,6 +7,7 @@ import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.*;
+import java.io.*;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.provider.MediaStore;
@@ -56,7 +57,8 @@ public class ConversionService extends Service {
                     (e.getMessage()==null?"":": "+e.getMessage());
                 if(reason.length()>160)reason=reason.substring(0,160);
                 getSharedPreferences("state",MODE_PRIVATE).edit()
-                    .putBoolean("jobActive",false).putString("lastFfmpegReason",reason).apply();
+                    .putBoolean("jobActive",false).putString("lastFfmpegReason",reason)
+                    .putString("lastFfmpegLog",android.util.Log.getStackTraceString(e)).apply();
                 addHistory("✕ "+reason);
                 update(0,1,0,0,0,"ClipAMV • "+reason,true);
                 releaseWake();stopForeground(true);
@@ -68,6 +70,7 @@ public class ConversionService extends Service {
 
     private void runJobs(Intent intent){
         lastFailureReason="";
+        recordFailure("No FFmpeg error recorded for current conversion", "");
         ArrayList<String> inputs=intent.getStringArrayListExtra(EXTRA_INPUTS);
         if(inputs==null){
             inputs=new ArrayList<>();
@@ -99,7 +102,8 @@ public class ConversionService extends Service {
             update(i,total,0,0,0,"Inspecting "+original,false);
 
             PresetEngine.SourceInfo info=inspect(in);
-            if(info==null){fail++;lastFailureReason="Could not inspect "+original;addHistory("✕ "+original+" — inspect failed");continue;}
+            if(info==null){fail++;lastFailureReason="Could not inspect "+original;
+                recordFailure(lastFailureReason);addHistory("✕ "+original+" — inspect failed");continue;}
 
             PresetEngine.Crop crop=autoBars&&!info.image?detectBars(in,info):null;
             if(total==1&&intent.hasExtra("manualCropW")){crop=new PresetEngine.Crop(
@@ -122,25 +126,51 @@ public class ConversionService extends Service {
             else if(tree!=null)out=createInTree(Uri.parse(tree),outName,info.image);
             else out=null;
 
-            if(out==null){fail++;lastFailureReason="Could not create output; select a writable folder";addHistory("✕ "+outName+" — output create failed");continue;}
+            if(out==null){fail++;lastFailureReason="Could not create output; select a writable folder";
+                recordFailure(lastFailureReason);addHistory("✕ "+outName+" — output create failed");continue;}
 
             double runtime=test?30:(end>start&&end>0?end-start:Math.max(0,info.durationSeconds-start));
-            boolean ok=convertOne(in,out,info,preset,start,end,test,i,total,outName,runtime);
-            if(!ok){fail++;continue;}
-
-            boolean verified=verify(out,info.image,runtime);
-            if(!verified){
-                fail++;lastFailureReason="Output verification failed: "+outName;
-                addHistory("✕ "+outName+" — invalid output");
-                try{DocumentsContract.deleteDocument(getContentResolver(),out);}catch(Exception ignored){}
-                continue;
+            File stage=null;
+            try{
+                File root=getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                if(root==null)root=getCacheDir();
+                if(!root.exists()&&!root.mkdirs())throw new IOException("Temporary folder unavailable");
+                long estimate=PresetEngine.estimateBytes(info,preset,runtime);
+                StatFs disk=new StatFs(root.getAbsolutePath());
+                long reserve=Math.max(8L*1024*1024,(long)(estimate*1.30));
+                if(estimate>0&&disk.getAvailableBytes()<reserve)
+                    throw new IOException("Not enough temporary storage. Need about "+human(reserve));
+                stage=File.createTempFile("clipamv_stage_",info.image?".jpg":".amv",root);
+                if(!convertOne(in,stage,info,preset,start,end,test,i,total,outName,runtime)){
+                    fail++;continue;
+                }
+                if(!verify(stage,info.image,runtime)){
+                    fail++;lastFailureReason="Generated file failed format/duration check: "+outName;
+                    recordFailure(lastFailureReason);
+                    addHistory("✕ "+outName+" — generated file invalid");
+                    continue;
+                }
+                boolean seekOk=info.image||verifySeek(stage,runtime);
+                update(i,total,99,0,0,"Copying verified "+outName+" to destination",false);
+                long bytes=copyToOutput(stage,out);
+                completed++;lastName=displayName(out);lastBytes=bytes;totalBytes+=bytes;
+                addHistory((seekOk?"✓ ":"⚠ ")+outName+" — "+human(bytes)+
+                    (seekOk?" • seek OK":" • seek warning"));
+            }catch(Exception e){
+                fail++;
+                lastFailureReason="Output: "+e.getClass().getSimpleName()+
+                    (e.getMessage()==null?"":": "+e.getMessage());
+                recordFailure(lastFailureReason);
+                addHistory("✕ "+outName+" — "+lastFailureReason);
+                deleteOutput(out);
+            }finally{
+                if(stage!=null&&stage.exists())stage.delete();
+                if(lastFailureReason!=null&&completed+fail==i+1 && fail>0) {
+                    // Empty/incomplete SAF entries should not accumulate after failures.
+                    if(querySize(out)==0)deleteOutput(out);
+                }
             }
-            boolean seekOk=info.image || verifySeek(out,runtime);
-            long bytes=querySize(out);
-            completed++; lastName=displayName(out); lastBytes=bytes; totalBytes+=Math.max(0,bytes);
-            String mark=verified&&seekOk?"✓ ":"⚠ ";
-            String note=!verified?" verify warning":(!seekOk?" seek warning":" • seek OK");
-            addHistory(mark+outName+" — "+human(bytes)+note);
+
         }
 
         String title,msg;
@@ -164,21 +194,18 @@ public class ConversionService extends Service {
         notifyDone(title,msg);stopSelf();
     }
 
-    private boolean convertOne(Uri in,Uri out,PresetEngine.SourceInfo info,PresetEngine.Preset preset,
+    private boolean convertOne(Uri in,File stage,PresetEngine.SourceInfo info,PresetEngine.Preset preset,
                                double start,double end,boolean test,int index,int total,String outName,double runtime){
-        String inSaf,outSaf;
-        try{
-            inSaf=FFmpegKitConfig.getSafParameterForRead(this,in);
-            outSaf=FFmpegKitConfig.getSafParameterForWrite(this,out);
-        }catch(Exception e){
-            lastFailureReason="Unable to open media output: "+e.getClass().getSimpleName();
+        String inSaf;
+        try{inSaf=FFmpegKitConfig.getSafParameterForRead(this,in);}
+        catch(Exception e){
+            lastFailureReason="Unable to open source: "+e.getClass().getSimpleName();
+            recordFailure(lastFailureReason);
             addHistory("✕ "+outName+" — "+lastFailureReason);
-            try{DocumentsContract.deleteDocument(getContentResolver(),out);}catch(Exception ignored){}
             return false;
         }
-        String cmd=info.image?PresetEngine.buildImageCommand(inSaf,outSaf,preset):
-                PresetEngine.buildVideoCommand(inSaf,outSaf,preset,start,end,test,performanceMode);
-
+        String cmd=info.image?PresetEngine.buildImageCommand(inSaf,stage.getAbsolutePath(),preset):
+            PresetEngine.buildVideoCommand(inSaf,stage.getAbsolutePath(),preset,start,end,test,performanceMode);
         CountDownLatch latch=new CountDownLatch(1);
         final boolean[] ok={false};
         final StringBuilder ffmpegErrors=new StringBuilder();
@@ -195,29 +222,60 @@ public class ConversionService extends Service {
             long interval=performanceMode==2?1600:performanceMode==1?900:400;
             if(now-lastProgressUpdateMs<interval)return;
             lastProgressUpdateMs=now;
-            long t=(long)stats.getTime();
-            int pct=runtime>0?(int)Math.min(99,(t/1000.0)*100.0/runtime):0;
+            long elapsed=(long)stats.getTime();
+            int pct=runtime>0?(int)Math.min(98,(elapsed/1000.0)*100.0/runtime):0;
             double speed=stats.getSpeed();
-            long eta=speed>0?Math.max(0,(long)((runtime-t/1000.0)/speed)):0;
+            long eta=speed>0?Math.max(0,(long)((runtime-elapsed/1000.0)/speed)):0;
             update(index,total,pct,speed,eta,(index+1)+"/"+total+" • "+outName,false);
         });
         currentSessionId=session.getSessionId();
         try{latch.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}
         currentSessionId=-1;
-        if(!ok[0]){
+        if(!ok[0]||!stage.isFile()||stage.length()==0){
             String details;
             synchronized(ffmpegErrors){details=ffmpegErrors.toString();}
             String code=session.getReturnCode()==null?"?":session.getReturnCode().toString();
             lastFailureReason=describeFfmpegFailure(details,code);
-            getSharedPreferences("state",MODE_PRIVATE).edit()
-                .putString("lastFfmpegReason",lastFailureReason)
-                .putString("lastFfmpegLog",details).apply();
+            recordFailure(lastFailureReason,details);
             addHistory("✕ "+outName+" — "+lastFailureReason);
-            try{DocumentsContract.deleteDocument(getContentResolver(),out);}catch(Exception ignored){}
+            return false;
         }
-        return ok[0];
+        return true;
     }
 
+    private long copyToOutput(File source,Uri output) throws IOException {
+        // Request truncation when possible; some SAF providers accept only
+        // basic write mode, so fall back gracefully.
+        OutputStream raw;
+        try{raw=getContentResolver().openOutputStream(output,"rwt");}
+        catch(Exception unsupported){raw=getContentResolver().openOutputStream(output,"w");}
+        if(raw==null)throw new IOException("Destination refused an output stream");
+        long copied=0;
+        try(InputStream input=new BufferedInputStream(new FileInputStream(source),128*1024);
+            OutputStream result=new BufferedOutputStream(raw,128*1024)){
+            byte[] buffer=new byte[128*1024];int count;
+            while((count=input.read(buffer))!=-1){
+                if(cancelRequested)throw new IOException("Transfer cancelled");
+                if(count>0){result.write(buffer,0,count);copied+=count;}
+            }
+            result.flush();
+        }
+        if(copied!=source.length())throw new IOException("Copy incomplete: "+copied+"/"+source.length());
+        long written=querySize(output);
+        if(written>0&&written!=copied)throw new IOException("Destination size mismatch: "+written+"/"+copied);
+        return copied;
+    }
+    private void deleteOutput(Uri output){
+        try{DocumentsContract.deleteDocument(getContentResolver(),output);}
+        catch(Exception ignored){
+            try{getContentResolver().delete(output,null,null);}catch(Exception ignoredAgain){}
+        }
+    }
+    private void recordFailure(String reason){recordFailure(reason,reason);}
+    private void recordFailure(String reason,String log){
+        getSharedPreferences("state",MODE_PRIVATE).edit()
+            .putString("lastFfmpegReason",reason).putString("lastFfmpegLog",log).apply();
+    }
     private static String describeFfmpegFailure(String log,String code){
         String reason="";int best=-1;
         for(String raw:log.split("\\r?\\n")){
@@ -244,13 +302,20 @@ public class ConversionService extends Service {
         try{
             PresetEngine.SourceInfo s=new PresetEngine.SourceInfo();
             s.audioPresent=false;
-            String currentType="";
+            String currentType="",pendingCodec="";
             for(String raw:out.split("\\r?\\n")){
                 String line=raw.trim();
-                if(line.startsWith("codec_type="))currentType=line.substring(11);
-                else if(line.startsWith("codec_name=")){
-                    if("video".equals(currentType))s.videoCodec=line.substring(11);
-                    else if("audio".equals(currentType)){s.audioCodec=line.substring(11);s.audioPresent=true;}
+                if(line.startsWith("index=")){currentType="";pendingCodec="";}
+                else if(line.startsWith("codec_type=")){
+                    currentType=line.substring(11);
+                    if(!pendingCodec.isEmpty()){
+                        if("video".equals(currentType))s.videoCodec=pendingCodec;
+                        else if("audio".equals(currentType)){s.audioCodec=pendingCodec;s.audioPresent=true;}
+                    }
+                }else if(line.startsWith("codec_name=")){
+                    pendingCodec=line.substring(11);
+                    if("video".equals(currentType))s.videoCodec=pendingCodec;
+                    else if("audio".equals(currentType)){s.audioCodec=pendingCodec;s.audioPresent=true;}
                 }else if(line.startsWith("width=")&&s.width==0)s.width=Integer.parseInt(line.substring(6));
                 else if(line.startsWith("height=")&&s.height==0)s.height=Integer.parseInt(line.substring(7));
                 else if(line.startsWith("sample_aspect_ratio=")){double r=line.endsWith("N/A")?0:rational(line.substring(20).replace(':','/'));if(r>0)s.sampleAspect=r;}
@@ -279,31 +344,34 @@ public class ConversionService extends Service {
         return PresetEngine.isMeaningfulCrop(info,last)?last:null;
     }
 
-    private boolean verify(Uri out,boolean image,double expected){
-        String saf=FFmpegKitConfig.getSafParameterForRead(this,out);
+    private boolean verify(File stage,boolean image,double expected){
+        if(!stage.isFile()||stage.length()==0)return false;
+        String path=q(stage.getAbsolutePath());
         if(image){
-            FFprobeSession s=FFprobeKit.execute("-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "+q(saf));
-            return s.getOutput()!=null&&!s.getOutput().trim().isEmpty();
+            FFprobeSession s=FFprobeKit.execute("-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "+path);
+            return s.getOutput()!=null&&s.getOutput().contains("320");
         }
-        FFprobeSession s=FFprobeKit.execute("-v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=nw=1 "+q(saf));
-        String o=s.getOutput();
-        if(o==null||!o.contains("codec_name=amv")||!o.contains("width=320")||!o.contains("height=240"))return false;
-        Matcher m=Pattern.compile("duration=([0-9.]+)").matcher(o);
-        if(m.find()&&expected>3){
-            double d=Double.parseDouble(m.group(1));
-            return Math.abs(d-expected)<Math.max(5,expected*0.03);
+        FFprobeSession s=FFprobeKit.execute("-v error -select_streams v:0 -show_entries stream=codec_name,width,height "+
+            "-show_entries format=duration -of default=nw=1 "+path);
+        String result=s.getOutput();
+        if(result==null||!result.contains("codec_name=amv")||!result.contains("width=320")||
+           !result.contains("height=240"))return false;
+        Matcher matcher=Pattern.compile("duration=([0-9.]+)").matcher(result);
+        if(matcher.find()&&expected>3){
+            double duration=Double.parseDouble(matcher.group(1));
+            return Math.abs(duration-expected)<Math.max(5,expected*0.03);
         }
         return true;
     }
 
-    private boolean verifySeek(Uri out,double duration){
+    private boolean verifySeek(File stage,double duration){
         if(duration<20)return true;
-        String saf=FFmpegKitConfig.getSafParameterForRead(this,out);
-        double[] points={0.25,0.50,0.75};
-        for(double f:points){
-            double ss=Math.max(0,duration*f);
-            FFmpegSession s=FFmpegKit.execute("-v error -ss "+fmt(ss)+" -i "+q(saf)+" -frames:v 1 -an -f null -");
-            if(!ReturnCode.isSuccess(s.getReturnCode()))return false;
+        String path=q(stage.getAbsolutePath());
+        for(double fraction:new double[]{0.25,0.50,0.75}){
+            double point=Math.max(0,duration*fraction);
+            FFmpegSession session=FFmpegKit.execute("-v error -ss "+fmt(point)+
+                " -i "+path+" -frames:v 1 -an -f null -");
+            if(!ReturnCode.isSuccess(session.getReturnCode()))return false;
         }
         return true;
     }

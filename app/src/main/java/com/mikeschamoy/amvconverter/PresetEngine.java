@@ -34,7 +34,7 @@ public final class PresetEngine {
         public String name,filter;
         public int outputFps,blockSize,visibleHeight;
         public int q=-1,qmin=-1;
-        public boolean fourThree,fourThreePreserve,imageOutput,narrowFit;
+        public boolean fourThree,fourThreePreserve,imageOutput,narrowFit,audioPresent;
         public int contentWidth=320;
         public Crop detectedCrop;
         public Mode mode;
@@ -64,7 +64,7 @@ public final class PresetEngine {
                                 boolean preserve43,PortraitMode portraitMode,Crop crop,FrameMode framing,PictureMode processing){
         // AUTO is resolved after analyzing this particular file. SHARP is the safe fallback.
         String resize=processing==PictureMode.SMOOTH?"bicubic":"lanczos";
-        Preset p=new Preset();p.mode=mode;p.imageOutput=s.image;p.frameMode=framing;
+        Preset p=new Preset();p.mode=mode;p.imageOutput=s.image;p.audioPresent=s.audioPresent;p.frameMode=framing;
         p.detectedCrop=isMeaningfulCrop(s,crop)?crop:null;
         int auto=s.fps>=27?30:25;
         if(mode==Mode.SPACE_SAVER)auto=15;
@@ -119,9 +119,12 @@ public final class PresetEngine {
         else if(performance==2)c.append("-filter_threads 0 ");
         if(start>0)c.append("-ss ").append(fmt(start)).append(" ");
         c.append("-autorotate -i ").append(q(in)).append(" ");
+        if(!p.audioPresent)c.append("-f lavfi -i anullsrc=r=22050:cl=mono ");
         if(test)c.append("-t 30 ");
         else if(end>start&&end>0)c.append("-t ").append(fmt(end-start)).append(" ");
-        c.append("-vf ").append(q(p.filter)).append(" -map 0:v:0 -map 0:a:0? -sn ");
+        c.append("-vf ").append(q(p.filter)).append(" -map 0:v:0 ");
+        c.append(p.audioPresent?"-map 0:a:0? ":"-map 1:a:0 -shortest ");
+        c.append("-sn ");
         c.append("-r ").append(p.outputFps).append(" -c:v amv ");
         if(performance==1)c.append("-threads 2 ");
         else if(performance==2)c.append("-threads 0 ");
