@@ -25,10 +25,6 @@ done
 FIRST="$(ffmpeg -hide_banner -v error -i "$FILE" -frames:v 1 -an -f framemd5 -)"
 grep -Eq '^0,[[:space:]]*[0-9-]+,' <<< "$FIRST" || { echo 'FAIL: video frame could not be decoded' >&2; exit 1; }
 echo 'PASS: codec, dimensions, audio and decoded first frame'
-if "$DEEP"; then
-  echo 'Deep test: decoding the entire file. This may use significant CPU.'
-  ffmpeg -nostdin -hide_banner -v error -xerror -i "$FILE" -f null -
-  COUNT="$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of default=noprint_wrappers=1:nokey=1 "$FILE" | head -1)"
-  [[ "$COUNT" =~ ^[0-9]+$ ]] && [ "$COUNT" -gt 0 ] || { echo 'FAIL: frame count unavailable' >&2; exit 1; }
-  echo "PASS: full decode, $COUNT video frames"
-fi
+# Additional structural + near-end seek audit. Unlike a generic exit-code check,
+# this requires a real decoded frame at multiple late-video positions.
+python3 "$(dirname "$0")/check_amv_seek.py" "$FILE" $("$DEEP" && echo --deep || true)

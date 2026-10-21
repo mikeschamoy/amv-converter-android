@@ -156,7 +156,24 @@ public class ConversionService extends Service {
                     addHistory("✕ "+outName+" — generated file invalid");
                     continue;
                 }
-                boolean seekOk=info.image||verifySeek(stage,runtime);
+                // AMV has no index: scan every video/audio pair and the final trailer
+                // before publishing. A partial encode must never be marked complete.
+                double checkedDuration=runtime;
+                if(!info.image){
+                    update(i,total,98,0,0,"Auditing complete AMV frame structure",false);
+                    AMVIntegrity.Result audit=AMVIntegrity.inspect(stage,runtime);
+                    checkedDuration=audit.seconds; // Actual packet duration, not unreliable source metadata.
+                    android.util.Log.i("ClipAMV",audit.toString());
+                }
+                String seekProblem=info.image?null:verifySeek(stage,checkedDuration);
+                if(seekProblem!=null){
+                    fail++;
+                    lastFailureReason="End-of-video seeking verification failed: "+seekProblem+
+                        "; output was NOT published";
+                    recordFailure(lastFailureReason);
+                    addHistory("✕ "+outName+" — "+lastFailureReason);
+                    continue;
+                }
                 // Only create the visible destination after the local AMV passes validation.
                 if(!chosenDocument){
                     out=downloads?createInDownloads(outName,info.image):
@@ -167,8 +184,8 @@ public class ConversionService extends Service {
                 long bytes=copyToOutput(stage,out);
                 if(downloads&&!chosenDocument)publishDownload(out);
                 completed++;lastName=displayName(out);lastBytes=bytes;totalBytes+=bytes;
-                addHistory((seekOk?"✓ ":"⚠ ")+outName+" — "+human(bytes)+
-                    (seekOk?" • seek OK":" • seek warning"));
+                addHistory("✓ "+outName+" — "+human(bytes)+
+                    " • full structure/seek checks passed");
             }catch(Exception e){
                 fail++;
                 lastFailureReason="Output: "+e.getClass().getSimpleName()+
@@ -375,16 +392,53 @@ public class ConversionService extends Service {
         return true;
     }
 
-    private boolean verifySeek(File stage,double duration){
-        if(duration<20)return true;
+    /**
+     * Every probe must decode an actual frame.  FFmpeg sometimes returns exit
+     * code 0 while producing ZERO frames for a seek near/beyond EOF.  Saving
+     * framecrc to a temporary file avoids relying on FFmpegKit stdout capture.
+     *
+     * This verifies our file; it cannot emulate proprietary player firmware.
+     */
+    private String verifySeek(File stage,double duration){
+        if(duration<=1)return "encoded duration too short for seeking test";
         String path=q(stage.getAbsolutePath());
-        for(double fraction:new double[]{0.25,0.50,0.75}){
-            double point=Math.max(0,duration*fraction);
-            FFmpegSession session=FFmpegKit.execute("-v error -ss "+fmt(point)+
-                " -i "+path+" -frames:v 1 -an -f null -");
-            if(!ReturnCode.isSuccess(session.getReturnCode()))return false;
+        double[] marks=duration>=20?
+            new double[]{0.10,0.50,0.75,0.90,0.95,0.98}:
+            new double[]{0.20,0.70,0.90};
+        ArrayList<Double> positions=new ArrayList<>();
+        for(double fraction:marks){
+            double point=Math.max(0,Math.min(duration*fraction,duration-0.75));
+            if(positions.isEmpty()||Math.abs(positions.get(positions.size()-1)-point)>.3)
+                positions.add(point);
         }
-        return true;
+        double finalPoint=Math.max(0,duration-1.5);
+        if(positions.isEmpty()||Math.abs(positions.get(positions.size()-1)-finalPoint)>.3)
+            positions.add(finalPoint);
+        for(double position:positions){
+            File crc=null;
+            try{
+                crc=File.createTempFile("clipamv_seek_",".crc",getCacheDir());
+                FFmpegSession session=FFmpegKit.execute("-y -nostdin -v error -ss "+fmt(position)+
+                    " -i "+path+" -map 0:v:0 -frames:v 1 -an -f framecrc "+q(crc.getAbsolutePath()));
+                if(!ReturnCode.isSuccess(session.getReturnCode()))
+                    return "FFmpeg seek failed at "+fmt(position)+"s of "+fmt(duration)+"s";
+                boolean actualFrame=false;
+                try(BufferedReader input=new BufferedReader(new FileReader(crc))){
+                    String line;
+                    while((line=input.readLine())!=null){
+                        if(line.matches("^0,\\s*[-0-9]+,.*")){
+                            actualFrame=true;break;
+                        }
+                    }
+                }
+                if(!actualFrame)return "zero video frames at "+fmt(position)+"s of "+fmt(duration)+"s";
+            }catch(IOException e){
+                return "could not inspect seek result: "+e.getMessage();
+            }finally{
+                if(crc!=null)crc.delete();
+            }
+        }
+        return null;
     }
 
     private Uri createInDownloads(String name,boolean image){

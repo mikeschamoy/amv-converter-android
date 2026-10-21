@@ -34,3 +34,7 @@ Full device checklist: `RELEASE_QA_v064.md`.
 Build: GitHub Actions workflow `.github/workflows/build-apk.yml`.
 
 See `REPAIR_NOTES_v062.md` for changes, passed media tests, and device-validation requirements.
+
+## Full-length seek QA (v0.6.5)
+
+`bash scripts/check_amv.sh <path-to-amv>` verifies AMV packet structure and actual late-video frame decoding; use `--deep` to decode every frame. See `SEEK_QA_v065.md`. A passing computer test still requires physical Gen 2 seek confirmation.

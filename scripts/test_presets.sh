@@ -5,6 +5,8 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 javac -d "$TMP" app/src/main/java/com/mikeschamoy/amvconverter/PresetEngine.java tests/PresetEngineRegression.java
 java -cp "$TMP" com.mikeschamoy.amvconverter.PresetEngineRegression
+javac -d "$TMP" app/src/main/java/com/mikeschamoy/amvconverter/AMVIntegrity.java tests/AMVIntegrityRegression.java
+java -cp "$TMP" com.mikeschamoy.amvconverter.AMVIntegrityRegression
 python3 - <<'PY'
 from pathlib import Path
 from xml.etree import ElementTree as ET

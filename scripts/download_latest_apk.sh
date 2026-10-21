@@ -10,7 +10,7 @@ command -v unzip >/dev/null || { echo 'Install unzip: pkg install unzip'; exit 1
 mkdir -p "$DEST"
 SHA="$(git rev-parse HEAD)"
 RUN="$(gh run list -R "$REPO" --branch main --limit 35 --json databaseId,headSha \
-  --jq "[.[] | select(.headSha == \"$SHA\") | .databaseId][0] // empty""
+  --jq "[.[] | select(.headSha == \"$SHA\") | .databaseId][0] // empty")"
 if [ -z "$RUN" ]; then
   echo "No GitHub Actions run for commit $SHA yet." >&2
   gh run list -R "$REPO" --limit 5
