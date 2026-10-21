@@ -7,6 +7,7 @@ android {
         applicationId = "com.mikeschamoy.amvconverter"
         minSdk = 26
         targetSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 12
         versionName = "0.6.5"
     }
@@ -21,4 +22,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
-dependencies { implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.9") }
+dependencies {
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1") implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.9") }
