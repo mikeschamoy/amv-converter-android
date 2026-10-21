@@ -126,8 +126,7 @@ public final class PresetEngine {
         c.append(p.audioPresent?"-map 0:a:0? ":"-map 1:a:0 -shortest ");
         c.append("-sn ");
         c.append("-r ").append(p.outputFps).append(" -c:v amv ");
-        if(performance==1)c.append("-threads 2 ");
-        else if(performance==2)c.append("-threads 0 ");
+        if(performance>=1)c.append("-threads 0 ");
         if(p.q>0)c.append("-q:v ").append(p.q).append(" -qmin ").append(p.qmin).append(" ");
         c.append("-c:a adpcm_ima_amv -ac 1 -ar 22050 -block_size ").append(p.blockSize).append(" -avoid_negative_ts make_zero ");
         c.append("-f amv ").append(q(out));return c.toString();

@@ -51,7 +51,7 @@ public class MainActivity extends Activity {
     private double displayedPreviewSeconds=0;
     private String previewDiagnostic="No preview attempt recorded";
     private PresetEngine.Crop crop;
-    private String latestDiagnostics="ClipAMV v0.6.2\nNo source selected yet.";
+    private String latestDiagnostics="ClipAMV v0.6.4\nNo source selected yet.";
     private long sourceGeneration=0,queueGeneration=0;
     private double proxyBaseSeconds=0,pendingPreviewSeek=-1;
 
@@ -126,8 +126,11 @@ public class MainActivity extends Activity {
         bind(); setupUi(); setupPreview(); selfTest();
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},9);
-        if(getSharedPreferences("state",MODE_PRIVATE).getBoolean("jobActive",false))
-            statusText.setText("Conversion running in background. See notification for progress.");
+        if(getSharedPreferences("state",MODE_PRIVATE).getBoolean("jobActive",false)){
+            if(ConversionService.isWorking())
+                statusText.setText("Conversion running in background. See notification for progress.");
+            else getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
+        }
         handler.post(seekUpdater);
     }
 
@@ -721,7 +724,11 @@ public class MainActivity extends Activity {
         preview.setPreset(preset(),playerView);
         // No automatic 10-second re-encode every time the user changes a setting.
         // Play stays responsive; Refresh explicitly renders the exact AMV framing.
-        if(usingProxy)statusText.setText("Preset changed • tap Refresh to render updated AMV preview");
+        if(usingProxy){
+            double resume=proxyBaseSeconds+preview.position()/1000.0;
+            switchToSource(resume,false);
+            statusText.setText("Settings changed • showing source; tap Refresh for updated AMV preview");
+        }
         if(fallback.getVisibility()==View.VISIBLE)extractFrameAt(displayedPreviewSeconds);
     }
 
@@ -826,7 +833,7 @@ public class MainActivity extends Activity {
     private void resetDefaults(){mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;frameMode=PresetEngine.FrameMode.FIT;pictureMode=PresetEngine.PictureMode.AUTO;getSharedPreferences("state",MODE_PRIVATE).edit().putInt("picture",0).apply();queueAuto=true;setPerformance(0);refresh();}
 
     private String sourceBlock(PresetEngine.SourceInfo s){return "SOURCE\n"+s.width+"×"+s.height+"\n"+String.format(Locale.US,"%.3f fps",s.fps)+"\n"+String.format(Locale.US,"%.2f:1",s.ratio())+"\n"+(s.image?"IMAGE":fmtTime(s.durationSeconds))+"\nInput: "+human(s.inputBytes);}
-    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.6.2\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+type+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\n";}
+    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.6.4\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+type+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\n";}
     private void loadHistory(){String h=getSharedPreferences("history",MODE_PRIVATE).getString("items","");historyText.setText("RECENT\n"+(h.isEmpty()?"No conversions yet.":h));}
     private void takePerm(Uri uri,int flags){int f=flags&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);try{getContentResolver().takePersistableUriPermission(uri,f);}catch(Exception ignored){}}
     private String displayName(Uri uri){try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "media";}
@@ -850,7 +857,8 @@ public class MainActivity extends Activity {
 
     @Override protected void onStart(){
         super.onStart();
-        conversionActive=getSharedPreferences("state",MODE_PRIVATE).getBoolean("jobActive",false);
+        conversionActive=ConversionService.isWorking();
+        if(!conversionActive)getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
         if(conversionActive){
             convertButton.setEnabled(false);queueDownloadsButton.setEnabled(false);queueFolderButton.setEnabled(false);
             if(preview.isPlaying())preview.toggle();
@@ -858,7 +866,13 @@ public class MainActivity extends Activity {
         }
         IntentFilter f=new IntentFilter(ConversionService.ACTION_PROGRESS);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);loadHistory();}
     @Override protected void onStop(){try{unregisterReceiver(receiver);}catch(Exception ignored){}super.onStop();}
-    @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);preview.release();super.onDestroy();}
+    @Override protected void onDestroy(){
+        // Async preview and inspection callbacks must not update a destroyed Activity.
+        ++sourceGeneration;++queueGeneration;++previewJobVersion;
+        if(activePreviewSessionId>0){FFmpegKit.cancel(activePreviewSessionId);activePreviewSessionId=-1;}
+        handler.removeCallbacksAndMessages(null);
+        preview.release();super.onDestroy();
+    }
 
     private static final class SimpleTextWatcher implements TextWatcher{
         private final Runnable r;SimpleTextWatcher(Runnable r){this.r=r;}

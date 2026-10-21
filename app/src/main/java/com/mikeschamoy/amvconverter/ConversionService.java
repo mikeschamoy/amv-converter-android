@@ -29,6 +29,9 @@ public class ConversionService extends Service {
 
     private static final String CHANNEL="conversion";
     private static final int NOTIFY_ID=100;
+    // Process-local guard: persisted jobActive can survive a killed service/process.
+    private static volatile boolean working=false;
+    public static boolean isWorking(){return working;}
     private volatile boolean cancelRequested=false;
     private volatile long currentSessionId=-1;
     private volatile int performanceMode=0;
@@ -45,6 +48,8 @@ public class ConversionService extends Service {
             if(currentSessionId>0)FFmpegKit.cancel(currentSessionId);
             return START_NOT_STICKY;
         }
+        if(working)return START_NOT_STICKY; // Ignore duplicate Start taps/Intents.
+        working=true;
         cancelRequested=false;
         performanceMode=Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_PERFORMANCE,0)));
         lastProgressUpdateMs=0;
@@ -61,7 +66,7 @@ public class ConversionService extends Service {
                     .putString("lastFfmpegLog",android.util.Log.getStackTraceString(e)).apply();
                 addHistory("✕ "+reason);
                 update(0,1,0,0,0,"ClipAMV • "+reason,true);
-                releaseWake();stopForeground(true);
+                working=false;releaseWake();stopForeground(true);
                 notifyDone("ClipAMV • Conversion failed",reason);stopSelf();
             }
         }).start();
@@ -97,6 +102,7 @@ public class ConversionService extends Service {
         int total=inputs.size(),fail=0,completed=0;
         String lastName=""; long lastBytes=0,totalBytes=0;
         for(int i=0;i<total&&!cancelRequested;i++){
+            lastFailureReason="";
             Uri in=Uri.parse(inputs.get(i));
             String original=displayName(in);
             update(i,total,0,0,0,"Inspecting "+original,false);
@@ -120,14 +126,14 @@ public class ConversionService extends Service {
             PresetEngine.Preset preset=PresetEngine.choose(info,itemType,mode,itemHeight,itemFps,preserve43,portrait,crop,frame,processing);
 
             String outName=FileNameCleaner.clean(original,itemType,info.image);
-            Uri out;
-            if(total==1&&singleOut!=null)out=Uri.parse(singleOut);
-            else if(downloads)out=createInDownloads(outName,info.image);
-            else if(tree!=null)out=createInTree(Uri.parse(tree),outName,info.image);
-            else out=null;
-
-            if(out==null){fail++;lastFailureReason="Could not create output; select a writable folder";
-                recordFailure(lastFailureReason);addHistory("✕ "+outName+" — output create failed");continue;}
+            // Never expose an empty AMV in Downloads while it is still encoding.
+            // ACTION_CREATE_DOCUMENT has already created a destination; don't delete it on failure.
+            final boolean chosenDocument=total==1&&singleOut!=null;
+            Uri out=chosenDocument?Uri.parse(singleOut):null;
+            if(!chosenDocument&&!downloads&&tree==null){
+                fail++;lastFailureReason="Choose a writable output folder";
+                recordFailure(lastFailureReason);addHistory("✕ "+outName+" — no destination");continue;
+            }
 
             double runtime=test?30:(end>start&&end>0?end-start:Math.max(0,info.durationSeconds-start));
             File stage=null;
@@ -151,8 +157,15 @@ public class ConversionService extends Service {
                     continue;
                 }
                 boolean seekOk=info.image||verifySeek(stage,runtime);
+                // Only create the visible destination after the local AMV passes validation.
+                if(!chosenDocument){
+                    out=downloads?createInDownloads(outName,info.image):
+                        createInTree(Uri.parse(tree),outName,info.image);
+                    if(out==null)throw new IOException("Could not create destination "+outName);
+                }
                 update(i,total,99,0,0,"Copying verified "+outName+" to destination",false);
                 long bytes=copyToOutput(stage,out);
+                if(downloads&&!chosenDocument)publishDownload(out);
                 completed++;lastName=displayName(out);lastBytes=bytes;totalBytes+=bytes;
                 addHistory((seekOk?"✓ ":"⚠ ")+outName+" — "+human(bytes)+
                     (seekOk?" • seek OK":" • seek warning"));
@@ -162,13 +175,9 @@ public class ConversionService extends Service {
                     (e.getMessage()==null?"":": "+e.getMessage());
                 recordFailure(lastFailureReason);
                 addHistory("✕ "+outName+" — "+lastFailureReason);
-                deleteOutput(out);
+                if(!chosenDocument&&out!=null)deleteOutput(out);
             }finally{
                 if(stage!=null&&stage.exists())stage.delete();
-                if(lastFailureReason!=null&&completed+fail==i+1 && fail>0) {
-                    // Empty/incomplete SAF entries should not accumulate after failures.
-                    if(querySize(out)==0)deleteOutput(out);
-                }
             }
 
         }
@@ -190,7 +199,7 @@ public class ConversionService extends Service {
         int finalPercent=total>0?(int)Math.round(100.0*completed/total):0;
         update(0,1,finalPercent,0,0,title+" • "+msg,true);
         getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
-        releaseWake();stopForeground(true);
+        working=false;releaseWake();stopForeground(true);
         notifyDone(title,msg);stopSelf();
     }
 
@@ -266,6 +275,7 @@ public class ConversionService extends Service {
         return copied;
     }
     private void deleteOutput(Uri output){
+        if(output==null)return;
         try{DocumentsContract.deleteDocument(getContentResolver(),output);}
         catch(Exception ignored){
             try{getContentResolver().delete(output,null,null);}catch(Exception ignoredAgain){}
@@ -282,7 +292,7 @@ public class ConversionService extends Service {
             String line=raw.trim();
             if(line.isEmpty())continue;
             String low=line.toLowerCase(Locale.US);
-            int score=low.contains("unknown encoder")||low.contains("unable to choose an output format")?10:
+            int score=low.contains("unknown encoder")||low.contains("unable to choose an output format")||low.contains("error parsing options")?10:
                 low.contains("invalid argument")||low.contains("no such filter")||low.contains("unsupported")?8:
                 low.contains("could not")||low.contains("failed to")||low.contains("error while")?7:
                 low.contains("error")||low.contains("failed")?5:0;
@@ -351,11 +361,12 @@ public class ConversionService extends Service {
             FFprobeSession s=FFprobeKit.execute("-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "+path);
             return s.getOutput()!=null&&s.getOutput().contains("320");
         }
-        FFprobeSession s=FFprobeKit.execute("-v error -select_streams v:0 -show_entries stream=codec_name,width,height "+
+        FFprobeSession s=FFprobeKit.execute("-v error -show_entries stream=codec_name,codec_type,width,height,sample_rate,channels "+
             "-show_entries format=duration -of default=nw=1 "+path);
         String result=s.getOutput();
         if(result==null||!result.contains("codec_name=amv")||!result.contains("width=320")||
-           !result.contains("height=240"))return false;
+           !result.contains("height=240")||!result.contains("codec_name=adpcm_ima_amv")||
+           !result.contains("sample_rate=22050")||!result.contains("channels=1"))return false;
         Matcher matcher=Pattern.compile("duration=([0-9.]+)").matcher(result);
         if(matcher.find()&&expected>3){
             double duration=Double.parseDouble(matcher.group(1));
@@ -383,9 +394,19 @@ public class ConversionService extends Service {
             ContentValues v=new ContentValues();
             v.put(MediaStore.Downloads.DISPLAY_NAME,name);
             v.put(MediaStore.Downloads.MIME_TYPE,image?"image/jpeg":"application/octet-stream");
-            if(Build.VERSION.SDK_INT>=29)v.put(MediaStore.Downloads.IS_PENDING,0);
+            if(Build.VERSION.SDK_INT>=29)v.put(MediaStore.Downloads.IS_PENDING,1);
             return getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,v);
         }catch(Exception e){return null;}
+    }
+
+    private void publishDownload(Uri uri) throws IOException {
+        if(Build.VERSION.SDK_INT<29)return;
+        ContentValues values=new ContentValues();
+        values.put(MediaStore.Downloads.IS_PENDING,0);
+        try{
+            if(getContentResolver().update(uri,values,null,null)!=1)
+                throw new IOException("Could not publish the completed download");
+        }catch(SecurityException e){throw new IOException("Download publish permission denied",e);}
     }
 
     private String uniqueDownloadName(String name){
@@ -510,5 +531,9 @@ public class ConversionService extends Service {
     private static String eta(long s){long h=s/3600,m=(s%3600)/60,x=s%60;return h>0?String.format(Locale.US,"%d:%02d:%02d",h,m,x):String.format(Locale.US,"%d:%02d",m,x);}
     private static String human(long b){if(b<=0)return "?";double m=b/1048576.0;return m>=1024?String.format(Locale.US,"%.2f GB",m/1024):String.format(Locale.US,"%.0f MB",m);}
     @Override public IBinder onBind(Intent i){return null;}
-    @Override public void onDestroy(){releaseWake();super.onDestroy();}
+    @Override public void onDestroy(){
+        working=false;
+        getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
+        releaseWake();super.onDestroy();
+    }
 }

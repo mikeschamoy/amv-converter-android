@@ -1,3 +1,20 @@
+# ClipAMV v0.6.4 — release candidate
+
+This candidate builds on v0.6.3 and preserves the 320×240 Gen 2 AMV presets,
+calibrated preview, Auto/Sharp/Smooth, Fit/Fill, and redesigned launcher.
+It improves output safety, crash recovery, and performance/thread defaults.
+**It is not certified final until GitHub Actions and physical Motorola/MP3 tests pass.**
+
+Termux developer checks: `bash scripts/test_presets.sh`
+
+Download the exact GitHub build (no installer prompt): `bash scripts/download_latest_apk.sh`
+
+Check a finished AMV: `bash scripts/check_amv.sh "/storage/emulated/0/Download/NAME.amv"`
+
+Full device checklist: `RELEASE_QA_v064.md`.
+
+---
+
 # ClipAMV v0.6.2
 
 **Your Media, Player-Ready** — Android AMV converter for Gen 2 players.
