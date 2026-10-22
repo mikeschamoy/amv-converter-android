@@ -16,12 +16,61 @@ public final class PresetEngineRegression {
                     check(p.filter.contains("pad=320:240"),"final canvas missing");
                     check(p.filter.contains("setsar=1"),"square pixel reset missing");
                     check(p.filter.contains(pm==PresetEngine.PictureMode.SMOOTH?"flags=bicubic":"flags=lanczos"),"wrong scaler");
-                    check(p.filter.contains(fm==PresetEngine.FrameMode.FIT?"force_original_aspect_ratio=decrease":"force_original_aspect_ratio=increase"),"wrong framing");
+                    check(p.filter.contains("scale=-2:")||p.filter.contains("scale=256:-2"),"scale must retain source aspect without double resizing");
+                    check(p.pictureWidth>0&&p.pictureWidth<=256 && p.pictureHeight>0&&p.pictureHeight<=240,"invalid visible geometry");
                     check(p.outputFps==25,"manual FPS lost");
                     cases++;
                 }
             }
         }
+        // Regression: YT + 208 + AUTO must NEVER silently shrink to 144px.
+        PresetEngine.SourceInfo yt=new PresetEngine.SourceInfo();
+        yt.width=640;yt.height=360;yt.fps=30;yt.audioPresent=true;
+        PresetEngine.Preset automatic=PresetEngine.choose(yt,PresetEngine.Type.YOUTUBE,
+                PresetEngine.Mode.STANDARD,208,30,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
+        check(automatic.frameMode==PresetEngine.FrameMode.FILL,"YT AUTO should fill");
+        check(automatic.pictureHeight==208,"YT 208 AUTO picture became "+automatic.pictureHeight+"px");
+        check(automatic.filter.contains("crop=256:208"),"YT auto missing 208px crop");
+        check(automatic.filter.contains("+32"),"lost X64 viewport compensation");
+        PresetEngine.Preset explicitFit=PresetEngine.choose(yt,PresetEngine.Type.YOUTUBE,
+                PresetEngine.Mode.STANDARD,208,30,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.FIT,PresetEngine.PictureMode.SHARP);
+        check(explicitFit.pictureHeight==144,"explicit FIT should accurately report 144px");
+        PresetEngine.SourceInfo cinema=new PresetEngine.SourceInfo();
+        cinema.width=1920;cinema.height=800;cinema.fps=24;cinema.audioPresent=true;
+        PresetEngine.Preset cin=PresetEngine.choose(cinema,PresetEngine.Type.MOVIE_SHOW,
+                PresetEngine.Mode.STANDARD,184,25,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
+        check(cin.frameMode==PresetEngine.FrameMode.BALANCED,"scope movie should be balanced");
+        check(cin.horizontalCropPercent<=33.5,"scope auto cropped too much horizontally");
+        PresetEngine.SourceInfo tv=new PresetEngine.SourceInfo();
+        tv.width=640;tv.height=480;tv.fps=25;tv.audioPresent=true;
+        PresetEngine.Preset fourThreeFull=PresetEngine.choose(tv,PresetEngine.Type.YOUTUBE,
+                PresetEngine.Mode.STANDARD,0,25,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
+        check(fourThreeFull.frameMode==PresetEngine.FrameMode.FILL && fourThreeFull.pictureHeight==240,
+                "4:3 FULL did not fill 240px high");
+        PresetEngine.Preset fourThreePreserve=PresetEngine.choose(tv,PresetEngine.Type.YOUTUBE,
+                PresetEngine.Mode.STANDARD,0,25,true,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
+        check(fourThreePreserve.frameMode==PresetEngine.FrameMode.FIT && fourThreePreserve.pictureHeight==192,
+                "4:3 PRESERVE lost uncropped view");
+        PresetEngine.Preset manual43=PresetEngine.choose(tv,PresetEngine.Type.YOUTUBE,
+                PresetEngine.Mode.STANDARD,208,25,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
+        check(manual43.requestedHeight==208,"Explicit height lost for 4:3 queue member");
+        PresetEngine.SourceInfo vertical=new PresetEngine.SourceInfo();
+        vertical.width=360;vertical.height=640;vertical.fps=25;
+        PresetEngine.Preset manualPortrait=PresetEngine.choose(vertical,PresetEngine.Type.PORTRAIT,
+                PresetEngine.Mode.STANDARD,208,25,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
+        check(manualPortrait.requestedHeight==208,"Explicit height lost for portrait queue member");
+        PresetEngine.SourceInfo square=new PresetEngine.SourceInfo();square.width=640;square.height=640;
+        check(PresetEngine.choose(square,PresetEngine.Type.YOUTUBE,PresetEngine.Mode.STANDARD,
+                208,25,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP).frameMode==PresetEngine.FrameMode.FIT,
+                "square should fit in AUTO");
         PresetEngine.SourceInfo s=new PresetEngine.SourceInfo();
         s.width=1440;s.height=720;s.fps=24;s.audioPresent=true;
         PresetEngine.Preset p=PresetEngine.choose(s,PresetEngine.Type.MOVIE_SHOW,
@@ -31,7 +80,7 @@ public final class PresetEngineRegression {
         String maximum=PresetEngine.buildVideoCommand("in.mkv","out.amv",p,0,30,true,2);
         check(standard.contains("-f amv"),"AMV muxer missing");
         check(faster.contains("-threads 0")&&!faster.contains("-threads 2"),"Faster artificially limits encoder threads");
-        check(faster.contains("-filter_threads 2")&&maximum.contains("-filter_threads 0"),"Performance filters incorrect");
+        check(!faster.contains("-filter_threads")&&maximum.contains("-filter_threads 0"),"Faster should preserve Termux-like filter defaults; Maximum auto filters");
         check(!maximum.contains("-autorotate"),"Unsupported explicit autorotate still present");
         check(!standard.contains("libx264"),"Incorrect preview codec in AMV command");
         check(standard.contains("-block_size 882"),"25fps AMV audio block size incorrect");

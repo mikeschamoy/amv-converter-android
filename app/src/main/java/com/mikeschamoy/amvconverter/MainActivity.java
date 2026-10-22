@@ -35,7 +35,7 @@ public class MainActivity extends Activity {
     private int heightOverride=0,fpsOverride=0;
     private boolean preserve43=false,playerView=true,advanced=false,queueAuto=true,usingProxy=false,generatingProxy=false,conversionActive=false;
     private int performanceMode=0;
-    private PresetEngine.FrameMode frameMode=PresetEngine.FrameMode.FIT;
+    private PresetEngine.FrameMode frameMode=PresetEngine.FrameMode.AUTO;
     private PresetEngine.PictureMode pictureMode=PresetEngine.PictureMode.AUTO;
     private PresetEngine.PictureMode autoPicture=PresetEngine.PictureMode.SHARP;
     private String autoReason="Waiting to analyze selected video";
@@ -46,6 +46,8 @@ public class MainActivity extends Activity {
     private final Runnable previewRebuild=()->generateRawProxy();
     private long activePreviewSessionId=-1;
     private boolean previewSeeking=false;
+    private int subtitleMode=SubtitleSupport.OFF,subtitleSize=SubtitleSupport.LARGE;
+    private Button subsOffButton,subsForcedButton,subsTextButton,subsNormalButton,subsLargeButton;
     private boolean previewAutoplayWhenReady=false;
     private double pendingSourceSeekSeconds=-1;
     private double displayedPreviewSeconds=0;
@@ -57,12 +59,12 @@ public class MainActivity extends Activity {
 
     private TextView stateBadge,fileText,sourceText,reasonText,outputNameText,cropText,estimateText,presetText,statusText,historyText,previewTime,queueHeader,telemetryText;
     private LinearLayout queuePanel,queueList;
-    private Button youtubeButton,movieButton,cartoonButton,portraitButton,spaceSaverButton,standardButton,qualityButton,perfStandardButton,perfFasterButton,perfMaximumButton,fitFrameButton,fillFrameButton;
+    private Button youtubeButton,movieButton,cartoonButton,portraitButton,spaceSaverButton,standardButton,qualityButton,perfStandardButton,perfFasterButton,perfMaximumButton,autoFrameButton,fitFrameButton,balancedFrameButton,fillFrameButton;
     private Button[] heightButtons,fpsButtons;
     private Button full43,preserve43Button,portraitFit,portraitZoom,portraitRotate,playerViewButton,rawViewButton;
     private Button convertButton,startQueueButton,cancelButton,advancedButton,playPreviewButton,queueAutoButton,queueSameButton,queueDownloadsButton,queueFolderButton;
     private EditText startTrim,endTrim;
-    private CheckBox testClip;
+    private CheckBox testClip,autoBarsCheck;
     private ProgressBar progress;
     private PreviewTextureView preview;
     private ImageView fallback;
@@ -148,7 +150,9 @@ public class MainActivity extends Activity {
         pictureSmoothButton=findViewById(R.id.pictureSmoothButton);
         pictureCompareButton=findViewById(R.id.pictureCompareButton);
         pictureInfo=findViewById(R.id.pictureInfo);
-        fitFrameButton=findViewById(R.id.fitFrameButton);fillFrameButton=findViewById(R.id.fillFrameButton);
+        subsOffButton=findViewById(R.id.subsOffButton);subsForcedButton=findViewById(R.id.subsForcedButton);subsTextButton=findViewById(R.id.subsTextButton);
+        subsNormalButton=findViewById(R.id.subsNormalButton);subsLargeButton=findViewById(R.id.subsLargeButton);
+        autoFrameButton=findViewById(R.id.autoFrameButton);fitFrameButton=findViewById(R.id.fitFrameButton);balancedFrameButton=findViewById(R.id.balancedFrameButton);fillFrameButton=findViewById(R.id.fillFrameButton);
         queuePanel=findViewById(R.id.queuePanel); queueList=findViewById(R.id.queueList); queueHeader=findViewById(R.id.queueHeader);
         queueAutoButton=findViewById(R.id.queueAutoButton); queueSameButton=findViewById(R.id.queueSameButton);
         queueDownloadsButton=findViewById(R.id.queueDownloadsButton); queueFolderButton=findViewById(R.id.queueFolderButton);
@@ -161,7 +165,7 @@ public class MainActivity extends Activity {
         playerViewButton=findViewById(R.id.playerViewButton); rawViewButton=findViewById(R.id.rawViewButton);
         convertButton=findViewById(R.id.convertButton); startQueueButton=findViewById(R.id.startQueueButton); cancelButton=findViewById(R.id.cancelButton);
         advancedButton=findViewById(R.id.advancedButton); playPreviewButton=findViewById(R.id.playPreviewButton);
-        startTrim=findViewById(R.id.startTrim); endTrim=findViewById(R.id.endTrim); testClip=findViewById(R.id.testClip);
+        startTrim=findViewById(R.id.startTrim); endTrim=findViewById(R.id.endTrim); testClip=findViewById(R.id.testClip);autoBarsCheck=findViewById(R.id.autoBarsCheck);
         progress=findViewById(R.id.progressBar); preview=findViewById(R.id.previewTexture); fallback=findViewById(R.id.fallbackImage); previewSeek=findViewById(R.id.previewSeek);
         startQueueButton.setVisibility(View.GONE);
     }
@@ -169,13 +173,13 @@ public class MainActivity extends Activity {
     private void setupUi(){
         findViewById(R.id.selectButton).setOnClickListener(v->pickOne());
         findViewById(R.id.selectQueueButton).setOnClickListener(v->pickQueue());
-        youtubeButton.setOnClickListener(v->{type=PresetEngine.Type.YOUTUBE;heightOverride=0;refresh();});
-        movieButton.setOnClickListener(v->{type=PresetEngine.Type.MOVIE_SHOW;heightOverride=0;refresh();});
-        cartoonButton.setOnClickListener(v->{type=PresetEngine.Type.CARTOON;heightOverride=0;refresh();});
+        youtubeButton.setOnClickListener(v->{type=PresetEngine.Type.YOUTUBE;refresh();});
+        movieButton.setOnClickListener(v->{type=PresetEngine.Type.MOVIE_SHOW;refresh();});
+        cartoonButton.setOnClickListener(v->{type=PresetEngine.Type.CARTOON;refresh();});
         portraitButton.setOnClickListener(v->{type=PresetEngine.Type.PORTRAIT;portraitMode=source!=null&&source.isPortrait()?PresetEngine.PortraitMode.ROTATE:PresetEngine.PortraitMode.FIT;refresh();});
-        spaceSaverButton.setOnClickListener(v->{mode=PresetEngine.Mode.SPACE_SAVER;fpsOverride=0;refresh();});
-        standardButton.setOnClickListener(v->{mode=PresetEngine.Mode.STANDARD;fpsOverride=0;refresh();});
-        qualityButton.setOnClickListener(v->{mode=PresetEngine.Mode.QUALITY;fpsOverride=0;refresh();});
+        spaceSaverButton.setOnClickListener(v->{mode=PresetEngine.Mode.SPACE_SAVER;refresh();});
+        standardButton.setOnClickListener(v->{mode=PresetEngine.Mode.STANDARD;refresh();});
+        qualityButton.setOnClickListener(v->{mode=PresetEngine.Mode.QUALITY;refresh();});
         perfStandardButton.setOnClickListener(v->setPerformance(0));
         perfFasterButton.setOnClickListener(v->setPerformance(1));
         perfMaximumButton.setOnClickListener(v->setPerformance(2));
@@ -183,6 +187,13 @@ public class MainActivity extends Activity {
         pictureSharpButton.setOnClickListener(v->selectPicture(PresetEngine.PictureMode.SHARP));
         pictureSmoothButton.setOnClickListener(v->selectPicture(PresetEngine.PictureMode.SMOOTH));
         pictureCompareButton.setOnClickListener(v->comparePicture());
+        subsOffButton.setOnClickListener(v->setSubtitles(SubtitleSupport.OFF));
+        subsForcedButton.setOnClickListener(v->setSubtitles(SubtitleSupport.FORCED));
+        subsTextButton.setOnClickListener(v->setSubtitles(SubtitleSupport.FIRST_TEXT));
+        subsNormalButton.setOnClickListener(v->setSubtitleSize(SubtitleSupport.NORMAL));
+        subsLargeButton.setOnClickListener(v->setSubtitleSize(SubtitleSupport.LARGE));
+        autoFrameButton.setOnClickListener(v->{frameMode=PresetEngine.FrameMode.AUTO;refresh();});
+        balancedFrameButton.setOnClickListener(v->{frameMode=PresetEngine.FrameMode.BALANCED;refresh();});
         fitFrameButton.setOnClickListener(v->{frameMode=PresetEngine.FrameMode.FIT;refresh();});
         fillFrameButton.setOnClickListener(v->{frameMode=PresetEngine.FrameMode.FILL;refresh();});
 
@@ -432,7 +443,7 @@ public class MainActivity extends Activity {
         String name=displayName(uri); String meta="inspect failed";
         if(info!=null){
             PresetEngine.Type itemType=info.isPortrait()?PresetEngine.Type.PORTRAIT:type;
-            PresetEngine.Preset rec=PresetEngine.choose(info,itemType,mode,0,0,preserve43,portraitMode,null);
+            PresetEngine.Preset rec=PresetEngine.choose(info,itemType,mode,heightOverride,fpsOverride,preserve43,portraitMode,null,frameMode,effectivePicture());
             meta=info.width+"×"+info.height+" • "+String.format(Locale.US,"%.3f",info.fps)+" fps • "+rec.name;
         }
         boolean odd=first!=null&&info!=null&&(Math.abs(first.ratio()-info.ratio())>0.08||Math.abs(first.fps-info.fps)>3.0);
@@ -579,10 +590,34 @@ public class MainActivity extends Activity {
         File out=new File(getCacheDir(),"clipamv_proxy_"+gen+"_"+job+".mp4");
         stateBadge.setText("PREVIEW");statusText.setText("Rendering exact 320×240 framing preview…");
         // The preview goes through EXACTLY the same -vf chain as the AMV output.
-        String cmd="-y -ss "+f3(ss)+" -i "+q(saf)+" -t 10 -vf "+q(selected.filter)+
+        final int subChoice=subtitleMode,subFont=subtitleSize;
+        final Uri selectedSource=inputUri;
+        new Thread(()->{
+        File subtitles=null;
+        String filter=selected.filter;
+        try{
+            if(subChoice!=SubtitleSupport.OFF){
+                subtitles=SubtitleSupport.extract(this,selectedSource,subChoice,ss,10);
+                if(subtitles!=null)filter=SubtitleSupport.withSubtitles(filter,subtitles,subFont);
+            }
+        }catch(Exception e){
+            final String why=e.getMessage();
+            runOnUiThread(()->{
+                if(job==previewJobVersion&&gen==sourceGeneration){
+                    generatingProxy=false;stateBadge.setText("READY");
+                    recordPreviewProblem("Subtitle preview",why);
+                    statusText.setText("Subtitle preview failed: "+why);
+                }
+            });
+            out.delete();return;
+        }
+        final File subtitlesFinal=subtitles;
+        if(job!=previewJobVersion||gen!=sourceGeneration){if(subtitlesFinal!=null)subtitlesFinal.delete();return;}
+        String cmd="-y -ss "+f3(ss)+" -i "+q(saf)+" -t 10 -vf "+q(filter)+
                 " -map 0:v:0 -map 0:a:0? -r 15 -c:v mpeg4 -q:v 5 -pix_fmt yuv420p "+
                 "-c:a aac -b:a 64k -movflags +faststart "+q(out.getAbsolutePath());
         FFmpegSession rendering=FFmpegKit.executeAsync(cmd,session->runOnUiThread(()->{
+            if(subtitlesFinal!=null)subtitlesFinal.delete();
             if(job!=previewJobVersion||gen!=sourceGeneration){out.delete();return;}
             generatingProxy=false;stateBadge.setText("READY");activePreviewSessionId=-1;
             if(ReturnCode.isSuccess(session.getReturnCode())&&out.isFile()&&out.length()>0){
@@ -602,6 +637,7 @@ public class MainActivity extends Activity {
             }
         }));
         activePreviewSessionId=rendering.getSessionId();
+        },"clipamv-subtitle-preview").start();
     }
     private void extractFrameAt(double sec){
         if(conversionActive||inputUri==null||source==null)return;
@@ -627,7 +663,7 @@ public class MainActivity extends Activity {
     private double currentPreviewSeconds(){return Math.max(0,displayedPreviewSeconds);}
 
     private void detectBars(){
-        if(queuePanel.getVisibility()==View.VISIBLE){statusText.setText("Queue uses uncropped fit for each file; bar detection applies to single files only.");return;}
+        if(queuePanel.getVisibility()==View.VISIBLE){statusText.setText("Queue auto-framing is source-aware. Detect Bars is applied to the selected preview file only.");return;}
         if(conversionActive||inputUri==null||source==null||source.image)return; final long gen=sourceGeneration; statusText.setText("Detecting black bars…");
         double ss=Math.max(0,source.durationSeconds/2-4); String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); final StringBuilder logs=new StringBuilder();
         FFmpegKit.executeAsync("-ss "+f3(ss)+" -i "+q(saf)+" -t 8 -vf cropdetect=limit=24:round=16:reset=0 -an -f null -",done->runOnUiThread(()->{
@@ -713,7 +749,7 @@ public class MainActivity extends Activity {
 
     private void refresh(){
         if(source==null)return; PresetEngine.Preset p=preset();
-        reasonText.setText(PresetEngine.explain(source,type,p)+" • calibrated player viewport • "+frameMode.name()+" • 320×240 AMV");
+        reasonText.setText(PresetEngine.explain(source,type,p)+" • X64 calibrated • "+(frameMode==PresetEngine.FrameMode.AUTO?"AUTO→"+p.frameMode.name():p.frameMode.name())+" • picture "+p.pictureWidth+"×"+p.pictureHeight+" (target "+p.requestedHeight+"px) • 320×240 AMV");
         outputNameText.setText("OUTPUT\n"+FileNameCleaner.clean(displayName(inputUri),type,source.image));
         presetText.setText("Preset Engine "+PresetEngine.PRESET_VERSION+"\n"+p.name+"\n"+p.filter+(p.q>0?"\nq="+p.q:""));
         latestDiagnostics=diagnostics(p); style(); refreshPreview(); refreshEstimate(); refreshQueueEstimate(); if(queueInfo.size()==queueUris.size()&&!queueInfo.isEmpty())rebuildQueueRows();
@@ -734,7 +770,7 @@ public class MainActivity extends Activity {
 
     private void refreshEstimate(){
         if(source==null)return; PresetEngine.Preset p=preset(); double st=parseTime(startTrim.getText().toString()),en=parseTime(endTrim.getText().toString());
-        double runtime=source.image?0:testClip.isChecked()?30:(en>st?en-st:Math.max(0,source.durationSeconds-st)); long est=PresetEngine.estimateBytes(source,p,runtime);
+        double runtime=source.image?0:testClip.isChecked()?(source.durationSeconds>st?Math.min(30,source.durationSeconds-st):30):(en>st?en-st:Math.max(0,source.durationSeconds-st)); long est=PresetEngine.estimateBytes(source,p,runtime);
         estimateText.setText("STORAGE\nInput: "+human(source.inputBytes)+"\nEstimated output: "+human((long)(est*.90))+"–"+human((long)(est*1.10))+
                 (source.image?"":"\nRuntime: "+fmtTime(runtime)+" • "+p.outputFps+" fps • "+mode.name().replace('_',' '))+"\nReserve: "+human((long)(est*1.10)));
     }
@@ -744,9 +780,9 @@ public class MainActivity extends Activity {
         long in=0,out=0; int ok=0;
         synchronized(queueInfo){for(PresetEngine.SourceInfo info:queueInfo.values()){
             if(info==null)continue; in+=info.inputBytes; ok++;
-            PresetEngine.Type t=queueAuto&&info.isPortrait()?PresetEngine.Type.PORTRAIT:type;
-            int h=queueAuto?0:heightOverride, f=queueAuto?0:fpsOverride;
-            PresetEngine.Preset p=PresetEngine.choose(info,t,mode,h,f,preserve43,portraitMode,null);
+            PresetEngine.Type t=queueAuto?(info.isPortrait()?PresetEngine.Type.PORTRAIT:(type==PresetEngine.Type.PORTRAIT?PresetEngine.Type.YOUTUBE:type)):type;
+            int h=heightOverride, f=fpsOverride;
+            PresetEngine.Preset p=PresetEngine.choose(info,t,mode,h,f,preserve43,portraitMode,null,frameMode,effectivePicture());
             out+=PresetEngine.estimateBytes(info,p,info.durationSeconds);
         }}
         queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\nInput "+human(in)+" • Est. "+human((long)(out*.90))+"–"+human((long)(out*1.10))+" • "+(queueAuto?"Auto each file":"Same settings"));
@@ -756,10 +792,15 @@ public class MainActivity extends Activity {
         Button[] content={youtubeButton,movieButton,cartoonButton,portraitButton}; for(Button b:content)b.setSelected(false); content[type.ordinal()].setSelected(true);
         spaceSaverButton.setSelected(mode==PresetEngine.Mode.SPACE_SAVER); standardButton.setSelected(mode==PresetEngine.Mode.STANDARD); qualityButton.setSelected(mode==PresetEngine.Mode.QUALITY);
         perfStandardButton.setSelected(performanceMode==0);perfFasterButton.setSelected(performanceMode==1);perfMaximumButton.setSelected(performanceMode==2);
-        fitFrameButton.setSelected(frameMode==PresetEngine.FrameMode.FIT);fillFrameButton.setSelected(frameMode==PresetEngine.FrameMode.FILL);
+        autoFrameButton.setSelected(frameMode==PresetEngine.FrameMode.AUTO);fitFrameButton.setSelected(frameMode==PresetEngine.FrameMode.FIT);balancedFrameButton.setSelected(frameMode==PresetEngine.FrameMode.BALANCED);fillFrameButton.setSelected(frameMode==PresetEngine.FrameMode.FILL);
         pictureAutoButton.setSelected(pictureMode==PresetEngine.PictureMode.AUTO);
         pictureSharpButton.setSelected(pictureMode==PresetEngine.PictureMode.SHARP);
         pictureSmoothButton.setSelected(pictureMode==PresetEngine.PictureMode.SMOOTH);
+        subsOffButton.setSelected(subtitleMode==SubtitleSupport.OFF);
+        subsForcedButton.setSelected(subtitleMode==SubtitleSupport.FORCED);
+        subsTextButton.setSelected(subtitleMode==SubtitleSupport.FIRST_TEXT);
+        subsNormalButton.setSelected(subtitleSize==SubtitleSupport.NORMAL);
+        subsLargeButton.setSelected(subtitleSize==SubtitleSupport.LARGE);
         pictureInfo.setText(pictureMode==PresetEngine.PictureMode.AUTO?
             "AUTO → "+autoPicture.name()+" • "+autoReason:
             pictureMode==PresetEngine.PictureMode.SHARP?"SHARP • Lanczos edge detail":"SMOOTH • Bicubic gentle scaling");
@@ -785,8 +826,8 @@ public class MainActivity extends Activity {
         long out=0;
         synchronized(queueInfo){for(PresetEngine.SourceInfo info:queueInfo.values()){
             if(info==null)continue;
-            PresetEngine.Type t=queueAuto&&info.isPortrait()?PresetEngine.Type.PORTRAIT:type;
-            PresetEngine.Preset p=PresetEngine.choose(info,t,mode,queueAuto?0:heightOverride,queueAuto?0:fpsOverride,preserve43,portraitMode,null);
+            PresetEngine.Type t=queueAuto?(info.isPortrait()?PresetEngine.Type.PORTRAIT:(type==PresetEngine.Type.PORTRAIT?PresetEngine.Type.YOUTUBE:type)):type;
+            PresetEngine.Preset p=PresetEngine.choose(info,t,mode,heightOverride,fpsOverride,preserve43,portraitMode,null,frameMode,effectivePicture());
             out+=PresetEngine.estimateBytes(info,p,info.durationSeconds);
         }}
         return out;
@@ -805,12 +846,15 @@ public class MainActivity extends Activity {
         i.putExtra(ConversionService.EXTRA_PERFORMANCE,performanceMode);
         i.putExtra(ConversionService.EXTRA_FRAME_MODE,frameMode.ordinal());
         i.putExtra(ConversionService.EXTRA_PICTURE_MODE,pictureMode.ordinal());
+        i.putExtra(ConversionService.EXTRA_SUBTITLE_MODE,subtitleMode);
+        i.putExtra(ConversionService.EXTRA_SUBTITLE_SIZE,subtitleSize);
         if(queueUris.isEmpty()&&crop!=null){i.putExtra("manualCropW",crop.w);i.putExtra("manualCropH",crop.h);i.putExtra("manualCropX",crop.x);i.putExtra("manualCropY",crop.y);}
-        i.putExtra(ConversionService.EXTRA_HEIGHT,heightOverride);i.putExtra(ConversionService.EXTRA_FPS,fpsOverride);i.putExtra(ConversionService.EXTRA_43,preserve43);i.putExtra(ConversionService.EXTRA_PORTRAIT,portraitMode.ordinal());i.putExtra(ConversionService.EXTRA_AUTOBARS,false);
+        i.putExtra(ConversionService.EXTRA_HEIGHT,heightOverride);i.putExtra(ConversionService.EXTRA_FPS,fpsOverride);i.putExtra(ConversionService.EXTRA_43,preserve43);i.putExtra(ConversionService.EXTRA_PORTRAIT,portraitMode.ordinal());i.putExtra(ConversionService.EXTRA_AUTOBARS,autoBarsCheck.isChecked());
         i.putExtra(ConversionService.EXTRA_START,parseTime(startTrim.getText().toString()));i.putExtra(ConversionService.EXTRA_END,parseTime(endTrim.getText().toString()));i.putExtra(ConversionService.EXTRA_TEST,testClip.isChecked());return i;
     }
 
     private void startServiceCompat(Intent i){
+        if(ConversionService.isWorking()){statusText.setText("A conversion is already running");return;}
         conversionActive=true;queueGeneration++;previewJobVersion++;handler.removeCallbacks(previewRebuild);
         if(activePreviewSessionId>0){FFmpegKit.cancel(activePreviewSessionId);activePreviewSessionId=-1;}
         if(preview.isPlaying())preview.toggle();
@@ -822,6 +866,16 @@ public class MainActivity extends Activity {
         telemetryText.setText("CPU: "+(performanceMode==2?"Maximum":performanceMode==1?"Faster":"Standard")+" • Checking thermal/battery…");
         statusText.setText("Conversion started. Safe to leave app or turn screen off.");
     }
+    private void setSubtitles(int newMode){
+        if(conversionActive)return;
+        subtitleMode=newMode;style();refreshPreview();
+        statusText.setText(newMode==SubtitleSupport.OFF?"Embedded subtitle tracks disabled. Burned-in text cannot be removed.":
+            "Text subtitles will be burned into converted AMVs; Refresh renders a subtitled preview.");
+    }
+    private void setSubtitleSize(int newSize){
+        if(conversionActive)return;
+        subtitleSize=newSize;style();refreshPreview();
+    }
     private void setPerformance(int p){
         if(conversionActive)return;
         performanceMode=p;
@@ -830,10 +884,16 @@ public class MainActivity extends Activity {
     }
     private void cancel(){Intent i=new Intent(this,ConversionService.class);i.setAction(ConversionService.ACTION_CANCEL);startService(i);}
     private void toggleAdvanced(){advanced=!advanced;findViewById(R.id.advancedPanel).setVisibility(advanced?View.VISIBLE:View.GONE);advancedButton.setText(advanced?"ADVANCED ▴":"ADVANCED ▾");}
-    private void resetDefaults(){mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;frameMode=PresetEngine.FrameMode.FIT;pictureMode=PresetEngine.PictureMode.AUTO;getSharedPreferences("state",MODE_PRIVATE).edit().putInt("picture",0).apply();queueAuto=true;setPerformance(0);refresh();}
+    private void resetDefaults(){mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;frameMode=PresetEngine.FrameMode.AUTO;pictureMode=PresetEngine.PictureMode.AUTO;subtitleMode=SubtitleSupport.OFF;subtitleSize=SubtitleSupport.LARGE;autoBarsCheck.setChecked(true);getSharedPreferences("state",MODE_PRIVATE).edit().putInt("picture",0).apply();queueAuto=true;setPerformance(0);refresh();}
 
     private String sourceBlock(PresetEngine.SourceInfo s){return "SOURCE\n"+s.width+"×"+s.height+"\n"+String.format(Locale.US,"%.3f fps",s.fps)+"\n"+String.format(Locale.US,"%.2f:1",s.ratio())+"\n"+(s.image?"IMAGE":fmtTime(s.durationSeconds))+"\nInput: "+human(s.inputBytes);}
-    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.6.4\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+type+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\n";}
+    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.7.0 RC1\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+type+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\nSubtitles: "+subtitleMode+" size "+subtitleSize+"\nAuto bars: "+autoBarsCheck.isChecked()+
+        "\nNative last encode: "+String.format(Locale.US,"%.2fx",getSharedPreferences("state",MODE_PRIVATE).getFloat("lastEncodeSpeed",0))+
+        " ("+getSharedPreferences("state",MODE_PRIVATE).getLong("lastEncodeWallMs",0)+" ms encoder only)"+
+        "\nLast encoded filter: "+getSharedPreferences("state",MODE_PRIVATE).getString("lastEncodeFilter","-")+
+        "\nEquivalent built-in FFmpeg command (input/output placeholders): "+PresetEngine.buildVideoCommand(
+            "INPUT","OUTPUT",p,parseTime(startTrim.getText().toString()),
+            parseTime(endTrim.getText().toString()),testClip.isChecked(),performanceMode)+"\n";}
     private void loadHistory(){String h=getSharedPreferences("history",MODE_PRIVATE).getString("items","");historyText.setText("RECENT\n"+(h.isEmpty()?"No conversions yet.":h));}
     private void takePerm(Uri uri,int flags){int f=flags&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);try{getContentResolver().takePersistableUriPermission(uri,f);}catch(Exception ignored){}}
     private String displayName(Uri uri){try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "media";}

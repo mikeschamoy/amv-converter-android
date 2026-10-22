@@ -8,8 +8,8 @@ android {
         minSdk = 26
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 12
-        versionName = "0.6.5"
+        versionCode = 15
+        versionName = "0.7.0-rc1"
     }
     buildTypes {
         release {

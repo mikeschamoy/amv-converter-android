@@ -17,6 +17,7 @@ import com.arthenica.ffmpegkit.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.*;
 
 public class ConversionService extends Service {
@@ -25,7 +26,7 @@ public class ConversionService extends Service {
     public static final String EXTRA_INPUT="input",EXTRA_INPUTS="inputs",EXTRA_OUTPUT="output",EXTRA_TREE="tree";
     public static final String EXTRA_TYPE="type",EXTRA_MODE="mode",EXTRA_HEIGHT="height",EXTRA_FPS="fps";
     public static final String EXTRA_43="f43",EXTRA_PORTRAIT="portrait",EXTRA_AUTOBARS="autobars";
-    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test",EXTRA_DOWNLOADS="downloads",EXTRA_QUEUE_AUTO="queueAuto",EXTRA_PERFORMANCE="performance",EXTRA_FRAME_MODE="frameMode",EXTRA_PICTURE_MODE="pictureMode";
+    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test",EXTRA_DOWNLOADS="downloads",EXTRA_QUEUE_AUTO="queueAuto",EXTRA_PERFORMANCE="performance",EXTRA_FRAME_MODE="frameMode",EXTRA_PICTURE_MODE="pictureMode",EXTRA_SUBTITLE_MODE="subtitleMode",EXTRA_SUBTITLE_SIZE="subtitleSize";
 
     private static final String CHANNEL="conversion";
     private static final int NOTIFY_ID=100;
@@ -90,7 +91,7 @@ public class ConversionService extends Service {
         int height=intent.getIntExtra(EXTRA_HEIGHT,0);
         int fps=intent.getIntExtra(EXTRA_FPS,0);
         PresetEngine.PictureMode picture=PresetEngine.PictureMode.values()[Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_PICTURE_MODE,0)))];
-        PresetEngine.FrameMode frame=PresetEngine.FrameMode.values()[Math.max(0,Math.min(1,intent.getIntExtra(EXTRA_FRAME_MODE,0)))];
+        PresetEngine.FrameMode frame=PresetEngine.FrameMode.values()[Math.max(0,Math.min(PresetEngine.FrameMode.values().length-1,intent.getIntExtra(EXTRA_FRAME_MODE,2)))];
         boolean preserve43=intent.getBooleanExtra(EXTRA_43,false);
         PresetEngine.PortraitMode portrait=PresetEngine.PortraitMode.values()[intent.getIntExtra(EXTRA_PORTRAIT,0)];
         boolean autoBars=intent.getBooleanExtra(EXTRA_AUTOBARS,true);
@@ -98,6 +99,8 @@ public class ConversionService extends Service {
         boolean test=intent.getBooleanExtra(EXTRA_TEST,false);
         boolean downloads=intent.getBooleanExtra(EXTRA_DOWNLOADS,false);
         boolean queueAuto=intent.getBooleanExtra(EXTRA_QUEUE_AUTO,false);
+        int subtitleMode=Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_SUBTITLE_MODE,SubtitleSupport.OFF)));
+        int subtitleSize=Math.max(0,Math.min(1,intent.getIntExtra(EXTRA_SUBTITLE_SIZE,SubtitleSupport.LARGE)));
 
         int total=inputs.size(),fail=0,completed=0;
         String lastName=""; long lastBytes=0,totalBytes=0;
@@ -116,8 +119,8 @@ public class ConversionService extends Service {
                     intent.getIntExtra("manualCropW",0),intent.getIntExtra("manualCropH",0),
                     intent.getIntExtra("manualCropX",0),intent.getIntExtra("manualCropY",0));}
             PresetEngine.Type itemType=queueAuto?(info.isPortrait()?PresetEngine.Type.PORTRAIT:(type==PresetEngine.Type.PORTRAIT?PresetEngine.Type.YOUTUBE:type)):type;
-            int itemHeight=queueAuto?0:height;
-            int itemFps=queueAuto?0:fps;
+            int itemHeight=height; // Explicit height is respected even in Auto Each File queues.
+            int itemFps=fps; // Explicit FPS is respected even in Auto Each File queues.
             PresetEngine.PictureMode processing=picture;
             if(picture==PresetEngine.PictureMode.AUTO){
                 PictureAnalysis.Result result=PictureAnalysis.analyze(this,in,info);
@@ -135,7 +138,9 @@ public class ConversionService extends Service {
                 recordFailure(lastFailureReason);addHistory("✕ "+outName+" — no destination");continue;
             }
 
-            double runtime=test?30:(end>start&&end>0?end-start:Math.max(0,info.durationSeconds-start));
+            double available=info.durationSeconds>0?Math.max(0,info.durationSeconds-start):0;
+            double requested=end>start&&end>0?end-start:available;
+            double runtime=test?(available>0?Math.min(30,available):30):(available>0?Math.min(requested,available):requested);
             File stage=null;
             try{
                 File root=getExternalFilesDir(Environment.DIRECTORY_MOVIES);
@@ -147,7 +152,7 @@ public class ConversionService extends Service {
                 if(estimate>0&&disk.getAvailableBytes()<reserve)
                     throw new IOException("Not enough temporary storage. Need about "+human(reserve));
                 stage=File.createTempFile("clipamv_stage_",info.image?".jpg":".amv",root);
-                if(!convertOne(in,stage,info,preset,start,end,test,i,total,outName,runtime)){
+                if(!convertOne(in,stage,info,preset,start,end,test,i,total,outName,runtime,subtitleMode,subtitleSize)){
                     fail++;continue;
                 }
                 if(!verify(stage,info.image,runtime)){
@@ -174,6 +179,7 @@ public class ConversionService extends Service {
                     addHistory("✕ "+outName+" — "+lastFailureReason);
                     continue;
                 }
+                if(cancelRequested)throw new IOException("Cancelled before publishing verified output");
                 // Only create the visible destination after the local AMV passes validation.
                 if(!chosenDocument){
                     out=downloads?createInDownloads(outName,info.image):
@@ -221,7 +227,7 @@ public class ConversionService extends Service {
     }
 
     private boolean convertOne(Uri in,File stage,PresetEngine.SourceInfo info,PresetEngine.Preset preset,
-                               double start,double end,boolean test,int index,int total,String outName,double runtime){
+                               double start,double end,boolean test,int index,int total,String outName,double runtime,int subtitleMode,int subtitleSize){
         String inSaf;
         try{inSaf=FFmpegKitConfig.getSafParameterForRead(this,in);}
         catch(Exception e){
@@ -230,9 +236,34 @@ public class ConversionService extends Service {
             addHistory("✕ "+outName+" — "+lastFailureReason);
             return false;
         }
+        File subtitle=null;
+        try {
+            if(!info.image && subtitleMode!=SubtitleSupport.OFF){
+                subtitle=SubtitleSupport.extract(this,in,subtitleMode,start,runtime);
+                if(subtitle==null){
+                    android.util.Log.i("ClipAMV","No compatible text subtitle track selected for "+outName);
+                }
+            }
+        } catch(IOException e){
+            lastFailureReason="Subtitle: "+e.getMessage();
+            recordFailure(lastFailureReason);
+            addHistory("✕ "+outName+" — "+lastFailureReason);
+            return false;
+        }
+        PresetEngine.Preset encodePreset=preset;
+        if(subtitle!=null){
+            encodePreset=new PresetEngine.Preset();
+            encodePreset.filter=SubtitleSupport.withSubtitles(preset.filter,subtitle,subtitleSize);
+            encodePreset.outputFps=preset.outputFps;
+            encodePreset.blockSize=preset.blockSize;
+            encodePreset.q=preset.q;encodePreset.qmin=preset.qmin;
+            encodePreset.audioPresent=preset.audioPresent;
+        }
         String cmd=info.image?PresetEngine.buildImageCommand(inSaf,stage.getAbsolutePath(),preset):
-            PresetEngine.buildVideoCommand(inSaf,stage.getAbsolutePath(),preset,start,end,test,performanceMode);
+            PresetEngine.buildVideoCommand(inSaf,stage.getAbsolutePath(),encodePreset,start,end,test,performanceMode);
         CountDownLatch latch=new CountDownLatch(1);
+        final long encoderStartMs=SystemClock.elapsedRealtime();
+        final AtomicLong encodedPositionMs=new AtomicLong(0);
         final boolean[] ok={false};
         final StringBuilder ffmpegErrors=new StringBuilder();
         FFmpegSession session=FFmpegKit.executeAsync(cmd,done->{
@@ -244,6 +275,7 @@ public class ConversionService extends Service {
             }
         },stats->{
             if(cancelRequested)return;
+            encodedPositionMs.updateAndGet(prev->Math.max(prev,(long)stats.getTime()));
             long now=SystemClock.elapsedRealtime();
             long interval=performanceMode==2?1600:performanceMode==1?900:400;
             if(now-lastProgressUpdateMs<interval)return;
@@ -255,8 +287,19 @@ public class ConversionService extends Service {
             update(index,total,pct,speed,eta,(index+1)+"/"+total+" • "+outName,false);
         });
         currentSessionId=session.getSessionId();
-        try{latch.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}
+        try{latch.await();}catch(InterruptedException e){Thread.currentThread().interrupt();FFmpegKit.cancel(session.getSessionId());}
+        finally{if(subtitle!=null)subtitle.delete();}
         currentSessionId=-1;
+        long encoderElapsedMs=Math.max(1,SystemClock.elapsedRealtime()-encoderStartMs);
+        double encodedSeconds=encodedPositionMs.get()>0?encodedPositionMs.get()/1000.0:runtime;
+        if(runtime>0)encodedSeconds=Math.min(encodedSeconds,runtime);
+        float measuredSpeed=(float)(Math.max(0,encodedSeconds)*1000.0/encoderElapsedMs);
+        getSharedPreferences("state",MODE_PRIVATE).edit()
+            .putFloat("lastEncodeSpeed",measuredSpeed)
+            .putLong("lastEncodeWallMs",encoderElapsedMs)
+            .putString("lastEncodeFilter",encodePreset.filter)
+            .putInt("lastEncodePerformance",performanceMode)
+            .apply();
         if(!ok[0]||!stage.isFile()||stage.length()==0){
             String details;
             synchronized(ffmpegErrors){details=ffmpegErrors.toString();}
@@ -362,13 +405,40 @@ public class ConversionService extends Service {
     }
 
     private PresetEngine.Crop detectBars(Uri uri,PresetEngine.SourceInfo info){
-        double ss=Math.max(0,info.durationSeconds/2.0-4);
-        String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
-        FFmpegSession session=FFmpegKit.execute("-ss "+fmt(ss)+" -i "+q(saf)+" -t 8 -vf cropdetect=limit=24:round=16:reset=0 -an -f null -");
-        Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(session.getOutput());
-        PresetEngine.Crop last=null;
-        while(m.find())last=new PresetEngine.Crop(Integer.parseInt(m.group(1)),Integer.parseInt(m.group(2)),Integer.parseInt(m.group(3)),Integer.parseInt(m.group(4)));
-        return PresetEngine.isMeaningfulCrop(info,last)?last:null;
+        // Take two independent, short samples. Do NOT adopt the last crop from a
+        // dark transient scene: both samples must agree before cropping.
+        PresetEngine.Crop first=detectBarsSample(uri,info,Math.max(0,info.durationSeconds*0.25));
+        if(first==null)return null;
+        if(info.durationSeconds<=5)return first;
+        PresetEngine.Crop second=detectBarsSample(uri,info,Math.max(0,info.durationSeconds*0.70));
+        if(second==null)return null;
+        if(Math.abs(first.w-second.w)>16||Math.abs(first.h-second.h)>16||
+           Math.abs(first.x-second.x)>16||Math.abs(first.y-second.y)>16)return null;
+        return first;
+    }
+
+    private PresetEngine.Crop detectBarsSample(Uri uri,PresetEngine.SourceInfo info,double at){
+        try{
+            String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
+            FFmpegSession session=FFmpegKit.execute("-hide_banner -ss "+fmt(at)+" -i "+q(saf)+
+                " -frames:v 25 -vf cropdetect=limit=24:round=16:reset=0 -an -f null -");
+            if(!ReturnCode.isSuccess(session.getReturnCode()))return null;
+            String all=session.getAllLogsAsString();
+            if(all==null)return null;
+            Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(all);
+            LinkedHashMap<String,Integer> votes=new LinkedHashMap<>();
+            int total=0;
+            while(m.find()){
+                String key=m.group(1)+":"+m.group(2)+":"+m.group(3)+":"+m.group(4);
+                votes.put(key,votes.getOrDefault(key,0)+1);total++;
+            }
+            String best=null;int most=0;
+            for(Map.Entry<String,Integer> x:votes.entrySet())if(x.getValue()>most){best=x.getKey();most=x.getValue();}
+            if(best==null||most<Math.max(5,(int)Math.ceil(total*.65)))return null;
+            String[] p=best.split(":");
+            PresetEngine.Crop result=new PresetEngine.Crop(Integer.parseInt(p[0]),Integer.parseInt(p[1]),Integer.parseInt(p[2]),Integer.parseInt(p[3]));
+            return PresetEngine.isMeaningfulCrop(info,result)?result:null;
+        }catch(Exception ignored){return null;}
     }
 
     private boolean verify(File stage,boolean image,double expected){

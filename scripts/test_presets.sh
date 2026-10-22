@@ -14,3 +14,5 @@ paths=list(Path('app/src/main').rglob('*.xml'))
 for p in paths:ET.parse(p)
 print(f'PASS: {len(paths)} Android XML files parsed')
 PY
+
+bash scripts/test_static_ui.sh
