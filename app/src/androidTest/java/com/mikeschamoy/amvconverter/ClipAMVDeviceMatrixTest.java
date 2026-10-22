@@ -73,13 +73,14 @@ public class ClipAMVDeviceMatrixTest {
         writeReport();
     }
     private void writeReport(){
-        try{
-            File f=new File(app.getExternalFilesDir(null),"ClipAMV-emulator-matrix.csv");
-            try(PrintWriter w=new PrintWriter(new FileWriter(f))){
-                w.println("test_id,result,details");
-                for(String[] row:report)w.println(csv(row[0])+","+csv(row[1])+","+csv(row[2]));
-            }
-        }catch(Exception ignored){}
+        File dir=app.getFilesDir();
+        if(dir==null)throw new AssertionError("QA report: internal app storage unavailable");
+        File f=new File(dir,"ClipAMV-emulator-matrix.csv");
+        try(PrintWriter w=new PrintWriter(new FileWriter(f))){
+            w.println("test_id,result,details");
+            for(String[] row:report)w.println(csv(row[0])+","+csv(row[1])+","+csv(row[2]));
+            if(w.checkError())throw new IOException("PrintWriter failed to flush QA report");
+        }catch(IOException e){throw new AssertionError("Cannot write QA report: "+f,e);}
     }
     private int type(String s){
         switch(s){case "Movie":return 1;case "Cartoon":return 2;case "Portrait":return 3;default:return 0;}
@@ -159,6 +160,8 @@ public class ClipAMVDeviceMatrixTest {
     }
     @Test public void runMatrixOnActualAndroidEncoder()throws Exception{
         JSONArray data=new JSONArray(readAll(fixtures.getAssets().open("matrix.json")));
+        assertEquals("Unexpected QA scenario count",39,data.length());
+        record("RUN_START","INFO","39 scenarios loaded");
         int pass=0,fail=0,skip=0;
         for(int idx=0;idx<data.length();idx++){
             JSONObject m=data.getJSONObject(idx);String id=m.getString("test_id");
