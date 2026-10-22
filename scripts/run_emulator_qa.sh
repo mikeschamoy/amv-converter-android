@@ -7,9 +7,35 @@ mkdir -p "$OUT"
 
 # Preserve the Gradle result across all report-collection commands.
 set +e
-gradle :app:connectedDebugAndroidTest --stacktrace 2>&1 | tee "$OUT/instrumentation-gradle.log"
+gradle :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace 2>&1 | tee "$OUT/instrumentation-gradle.log"
 code=${PIPESTATUS[0]}
 set -e
+
+if (( code != 0 )); then
+  echo "FAIL: compilation failed"
+  exit "$code"
+fi
+
+APP=app/build/outputs/apk/debug/app-debug.apk
+TEST=app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+
+[ -s "$APP" ] && [ -s "$TEST" ] || {
+  echo "FAIL: APK missing"
+  exit 1
+}
+
+adb install -r -g -t "$APP"
+adb install -r -g -t "$TEST"
+
+set +e
+adb shell am instrument -w -r   -e class 'com.mikeschamoy.amvconverter.ClipAMVDeviceMatrixTest#runMatrixOnActualAndroidEncoder'   'com.mikeschamoy.amvconverter.test/androidx.test.runner.AndroidJUnitRunner'   2>&1 | tee "$OUT/instrumentation.txt"
+result=${PIPESTATUS[0]}
+set -e
+
+if (( result != 0 )) || ! grep -q 'INSTRUMENTATION_CODE: -1' "$OUT/instrumentation.txt"; then
+  echo "FAIL: Android instrumentation did not pass"
+  exit 1
+fi
 
 adb logcat -d -v time > "$OUT/logcat.txt" 2>&1 || true
 adb shell screencap -p /sdcard/clipamv_qa_screen.png >/dev/null 2>&1 || true

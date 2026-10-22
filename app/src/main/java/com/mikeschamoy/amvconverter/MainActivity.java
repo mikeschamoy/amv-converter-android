@@ -630,7 +630,7 @@ public class MainActivity extends Activity {
         if(queuePanel.getVisibility()==View.VISIBLE){statusText.setText("Queue uses uncropped fit for each file; bar detection applies to single files only.");return;}
         if(conversionActive||inputUri==null||source==null||source.image)return; final long gen=sourceGeneration; statusText.setText("Detecting black bars…");
         double ss=Math.max(0,source.durationSeconds/2-4); String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); final StringBuilder logs=new StringBuilder();
-        FFmpegKit.executeAsync("-ss "+f3(ss)+" -i "+q(saf)+" -t 8 -vf cropdetect=24:16:0 -an -f null -",done->runOnUiThread(()->{
+        FFmpegKit.executeAsync("-ss "+f3(ss)+" -i "+q(saf)+" -t 8 -vf cropdetect=limit=24:round=16:reset=0 -an -f null -",done->runOnUiThread(()->{
             if(gen!=sourceGeneration)return; Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(logs.toString()); PresetEngine.Crop last=null;
             while(m.find())last=new PresetEngine.Crop(Integer.parseInt(m.group(1)),Integer.parseInt(m.group(2)),Integer.parseInt(m.group(3)),Integer.parseInt(m.group(4)));
             if(PresetEngine.isMeaningfulCrop(source,last)){crop=last;cropText.setText("Detected: "+last);refresh();}

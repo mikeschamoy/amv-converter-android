@@ -364,7 +364,7 @@ public class ConversionService extends Service {
     private PresetEngine.Crop detectBars(Uri uri,PresetEngine.SourceInfo info){
         double ss=Math.max(0,info.durationSeconds/2.0-4);
         String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
-        FFmpegSession session=FFmpegKit.execute("-ss "+fmt(ss)+" -i "+q(saf)+" -t 8 -vf cropdetect=24:16:0 -an -f null -");
+        FFmpegSession session=FFmpegKit.execute("-ss "+fmt(ss)+" -i "+q(saf)+" -t 8 -vf cropdetect=limit=24:round=16:reset=0 -an -f null -");
         Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(session.getOutput());
         PresetEngine.Crop last=null;
         while(m.find())last=new PresetEngine.Crop(Integer.parseInt(m.group(1)),Integer.parseInt(m.group(2)),Integer.parseInt(m.group(3)),Integer.parseInt(m.group(4)));
