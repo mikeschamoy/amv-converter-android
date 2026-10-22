@@ -24,4 +24,5 @@ android {
 }
 dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1") implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.9") }
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.9") }
