@@ -51,8 +51,8 @@ fi
 # These three methods include the 39-scenario matrix, forced subtitle burn-in,
 # and the Auto Framing geometry regression. An instrumentation success code
 # alone does not prove all new methods were actually selected.
-if ! grep -Eq '^INSTRUMENTATION_STATUS: numtests=3\r?$' "$OUT/instrumentation.txt"; then
-  echo 'FAIL: expected all 3 instrumentation methods to run'
+if ! grep -Eq '^INSTRUMENTATION_STATUS: numtests=4\r?$' "$OUT/instrumentation.txt"; then
+  echo 'FAIL: expected all 4 instrumentation methods to run'
   exit 1
 fi
 echo '=== RETRIEVE REPORT BEFORE APP UNINSTALL ==='

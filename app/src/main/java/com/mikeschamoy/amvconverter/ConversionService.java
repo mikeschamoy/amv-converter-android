@@ -35,6 +35,7 @@ public class ConversionService extends Service {
     public static boolean isWorking(){return working;}
     private volatile boolean cancelRequested=false;
     private volatile long currentSessionId=-1;
+    private volatile int lastAuxiliaryStartId=0;
     private volatile int performanceMode=0;
     private volatile long lastProgressUpdateMs=0;
     private String lastFailureReason="";
@@ -43,38 +44,49 @@ public class ConversionService extends Service {
     @Override public void onCreate(){super.onCreate();createChannel();}
 
     @Override public int onStartCommand(Intent intent,int flags,int startId){
-        if(intent==null)return START_NOT_STICKY;
+        if(intent==null){if(!working)stopSelfResult(startId);return START_NOT_STICKY;}
         if(ACTION_CANCEL.equals(intent.getAction())){
+            if(working)lastAuxiliaryStartId=startId;
             cancelRequested=true;
             if(currentSessionId>0)FFmpegKit.cancel(currentSessionId);
+            if(!working)stopSelfResult(startId);
             return START_NOT_STICKY;
         }
-        if(working)return START_NOT_STICKY; // Ignore duplicate Start taps/Intents.
+        startFg("Preparing…",0);
+        if(working){lastAuxiliaryStartId=startId;return START_NOT_STICKY;}
         working=true;
+        lastAuxiliaryStartId=0;
         cancelRequested=false;
         performanceMode=Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_PERFORMANCE,0)));
         lastProgressUpdateMs=0;
-        acquireWake();startFg("Preparing…",0);
+
         getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",true).apply();
         new Thread(()->{
-            try{runJobs(intent);}
+            try{acquireWake();runJobs(intent,startId);}
             catch(Exception e){
                 String reason="Unexpected error: "+e.getClass().getSimpleName()+
                     (e.getMessage()==null?"":": "+e.getMessage());
                 if(reason.length()>160)reason=reason.substring(0,160);
-                getSharedPreferences("state",MODE_PRIVATE).edit()
-                    .putBoolean("jobActive",false).putString("lastFfmpegReason",reason)
-                    .putString("lastFfmpegLog",android.util.Log.getStackTraceString(e)).apply();
+                recordFailure(reason,android.util.Log.getStackTraceString(e));
                 addHistory("✕ "+reason);
-                update(0,1,0,0,0,"ClipAMV • "+reason,true);
-                working=false;releaseWake();stopForeground(true);
-                notifyDone("ClipAMV • Conversion failed",reason);stopSelf();
+                finishJob(startId,"ClipAMV • Conversion failed",reason,0);
             }
         }).start();
         return START_NOT_STICKY;
     }
 
-    private void runJobs(Intent intent){
+    private void finishJob(int startId,String title,String msg,int finalPercent){
+        getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
+        working=false;
+        releaseWake();
+        stopForeground(true);
+        try{notifyDone(title,msg);}catch(RuntimeException e){android.util.Log.w("ClipAMV","Notify failed",e);}
+        try{update(0,1,finalPercent,0,0,title+" • "+msg,true);}
+        catch(RuntimeException e){android.util.Log.e("ClipAMV","Broadcast failed",e);}
+        stopSelfResult(Math.max(startId,lastAuxiliaryStartId));
+    }
+
+    private void runJobs(Intent intent,int startId){
         lastFailureReason="";
         recordFailure("No FFmpeg error recorded for current conversion", "");
         ArrayList<String> inputs=intent.getStringArrayListExtra(EXTRA_INPUTS);
@@ -220,10 +232,7 @@ public class ConversionService extends Service {
             msg="Last: "+(lastName.isEmpty()?"None":lastName)+" • "+human(totalBytes)+(fail>0?" • "+fail+" failed":"");
         }
         int finalPercent=total>0?(int)Math.round(100.0*completed/total):0;
-        update(0,1,finalPercent,0,0,title+" • "+msg,true);
-        getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
-        working=false;releaseWake();stopForeground(true);
-        notifyDone(title,msg);stopSelf();
+        finishJob(startId,title,msg,finalPercent);
     }
 
     private boolean convertOne(Uri in,File stage,PresetEngine.SourceInfo info,PresetEngine.Preset preset,
@@ -563,7 +572,7 @@ public class ConversionService extends Service {
     private void update(int index,int total,int pct,double speed,long eta,String label,boolean done){
         int overall=total<=0?pct:(int)Math.min(100,((index+pct/100.0)/total)*100);
         String msg=done?label:label+" • "+pct+"%"+(speed>0?" • "+String.format(Locale.US,"%.1fx",speed):"")+(eta>0?" • "+eta(eta)+" left":"");
-        ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFY_ID,notification(overall,msg));
+        if(!done)((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFY_ID,notification(overall,msg));
         String tele="Speed: "+(speed>0?String.format(Locale.US,"%.1fx",speed):"—")+
                 " • CPU: "+performanceLabel()+" • Thermal: "+thermalLabel()+" • Battery: "+batteryLabel();
         Intent i=new Intent(ACTION_PROGRESS);i.setPackage(getPackageName());

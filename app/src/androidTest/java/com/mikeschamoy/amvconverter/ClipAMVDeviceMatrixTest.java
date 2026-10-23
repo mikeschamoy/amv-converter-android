@@ -161,6 +161,25 @@ public class ClipAMVDeviceMatrixTest {
             return finalMessage[0];
         }finally{app.unregisterReceiver(listener);}
     }
+    @Test public void checkRapidSequentialForegroundStarts()throws Exception {
+        Uri source=importSource("01_YT_WIDE_16x9.mp4");
+        for(int n=0;n<2;n++){
+            Intent i=new Intent(app,ConversionService.class);
+            i.putExtra(ConversionService.EXTRA_INPUT,source.toString());
+            i.putExtra(ConversionService.EXTRA_TYPE,PresetEngine.Type.YOUTUBE.ordinal());
+            i.putExtra(ConversionService.EXTRA_MODE,PresetEngine.Mode.STANDARD.ordinal());
+            i.putExtra(ConversionService.EXTRA_FRAME_MODE,PresetEngine.FrameMode.AUTO.ordinal());
+            i.putExtra(ConversionService.EXTRA_PICTURE_MODE,PresetEngine.PictureMode.SHARP.ordinal());
+            i.putExtra(ConversionService.EXTRA_HEIGHT,208);
+            i.putExtra(ConversionService.EXTRA_FPS,25);
+            i.putExtra(ConversionService.EXTRA_AUTOBARS,false);
+            i.putExtra(ConversionService.EXTRA_DOWNLOADS,true);
+            i.putExtra(ConversionService.EXTRA_START,2.0*n);
+            i.putExtra(ConversionService.EXTRA_END,2.0*n+2.0);
+            startAndWait(i,120);
+            assertFalse(ConversionService.isWorking());
+        }
+    }
     /** Real Android test: prove Full-tier libass actually burns an embedded forced SRT. */
     @Test public void checkForcedSubtitleBurnIn()throws Exception {
         Map<String,Uri> before=outputs();
