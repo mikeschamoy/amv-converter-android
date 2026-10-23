@@ -26,7 +26,7 @@ public class ConversionService extends Service {
     public static final String EXTRA_INPUT="input",EXTRA_INPUTS="inputs",EXTRA_OUTPUT="output",EXTRA_TREE="tree";
     public static final String EXTRA_TYPE="type",EXTRA_MODE="mode",EXTRA_HEIGHT="height",EXTRA_FPS="fps";
     public static final String EXTRA_43="f43",EXTRA_PORTRAIT="portrait",EXTRA_AUTOBARS="autobars";
-    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test",EXTRA_DOWNLOADS="downloads",EXTRA_QUEUE_AUTO="queueAuto",EXTRA_PERFORMANCE="performance",EXTRA_FRAME_MODE="frameMode",EXTRA_PICTURE_MODE="pictureMode",EXTRA_SUBTITLE_MODE="subtitleMode",EXTRA_SUBTITLE_SIZE="subtitleSize";
+    public static final String EXTRA_START="start",EXTRA_END="end",EXTRA_TEST="test",EXTRA_DOWNLOADS="downloads",EXTRA_QUEUE_AUTO="queueAuto",EXTRA_AUTO_TYPE="autoType",EXTRA_PERFORMANCE="performance",EXTRA_FRAME_MODE="frameMode",EXTRA_PICTURE_MODE="pictureMode",EXTRA_SUBTITLE_MODE="subtitleMode",EXTRA_SUBTITLE_SIZE="subtitleSize";
 
     private static final String CHANNEL="conversion";
     private static final int NOTIFY_ID=100;
@@ -111,6 +111,7 @@ public class ConversionService extends Service {
         boolean test=intent.getBooleanExtra(EXTRA_TEST,false);
         boolean downloads=intent.getBooleanExtra(EXTRA_DOWNLOADS,false);
         boolean queueAuto=intent.getBooleanExtra(EXTRA_QUEUE_AUTO,false);
+        boolean autoType=intent.getBooleanExtra(EXTRA_AUTO_TYPE,false);
         int subtitleMode=Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_SUBTITLE_MODE,SubtitleSupport.OFF)));
         int subtitleSize=Math.max(0,Math.min(1,intent.getIntExtra(EXTRA_SUBTITLE_SIZE,SubtitleSupport.LARGE)));
 
@@ -130,7 +131,7 @@ public class ConversionService extends Service {
             if(total==1&&intent.hasExtra("manualCropW")){crop=new PresetEngine.Crop(
                     intent.getIntExtra("manualCropW",0),intent.getIntExtra("manualCropH",0),
                     intent.getIntExtra("manualCropX",0),intent.getIntExtra("manualCropY",0));}
-            PresetEngine.Type itemType=queueAuto?(info.isPortrait()?PresetEngine.Type.PORTRAIT:(type==PresetEngine.Type.PORTRAIT?PresetEngine.Type.YOUTUBE:type)):type;
+            PresetEngine.Type itemType=(queueAuto||autoType)?AutoSelection.choose(info,original):type;
             int itemHeight=height; // Explicit height is respected even in Auto Each File queues.
             int itemFps=fps; // Explicit FPS is respected even in Auto Each File queues.
             PresetEngine.PictureMode processing=picture;
@@ -231,6 +232,15 @@ public class ConversionService extends Service {
             title=fail==0?"✓ Queue complete • "+completed+"/"+total:"Queue finished • "+completed+"/"+total;
             msg="Last: "+(lastName.isEmpty()?"None":lastName)+" • "+human(totalBytes)+(fail>0?" • "+fail+" failed":"");
         }
+        String display=lastName.replaceFirst("(?i)\\.(amv|jpg)$","");
+        String destination=downloads?"Downloads":(tree!=null?"Selected folder":"Chosen document");
+        String result=(cancelRequested?"CANCELLED":fail>0||completed==0?"FINISHED WITH ERRORS":"CONVERSION COMPLETE")+
+            "\nFiles: "+completed+" of "+total+" saved"+(fail>0?" • "+fail+" failed":"")+
+            (completed>0?"\nLast: "+display+" • "+human(lastBytes)+"\nTotal: "+human(totalBytes):"")+
+            "\nSaved to: "+destination+
+            (completed>0?"\nChecks: AMV structure and seek verified before publishing":"")+
+            (fail>0?"\nIssue: "+lastFailureReason:"");
+        getSharedPreferences("state",MODE_PRIVATE).edit().putString("lastResult",result).apply();
         int finalPercent=total>0?(int)Math.round(100.0*completed/total):0;
         finishJob(startId,title,msg,finalPercent);
     }

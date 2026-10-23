@@ -21,6 +21,11 @@ public final class FileNameCleaner {
         s=s.replaceAll("(?i)\\b(full movie|official video|movieclips|transworld skateboarding|skateboarding)\\b"," ").replaceAll("\\s+"," ").trim();
         return shorten(s,16)+(image?".jpg":".amv");
     }
+    // Only the base name is limited to 16 characters; the extension is required on disk.
+    public static String displayBase(String raw,PresetEngine.Type type,boolean image){
+        String result=clean(raw,type,image);
+        return result.replaceFirst("(?i)\\.(amv|jpg)$","");
+    }
     private static String shorten(String s,int max){
         if(s.length()<=max)return s;
         String[] words=s.split("\\s+");StringBuilder b=new StringBuilder();
