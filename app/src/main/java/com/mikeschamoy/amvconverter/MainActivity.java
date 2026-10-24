@@ -62,7 +62,7 @@ public class MainActivity extends Activity {
     private Button youtubeButton,movieButton,cartoonButton,portraitButton,spaceSaverButton,standardButton,qualityButton,perfStandardButton,perfFasterButton,perfMaximumButton,autoFrameButton,fitFrameButton,balancedFrameButton,fillFrameButton;
     private Button[] heightButtons,fpsButtons;
     private Button full43,preserve43Button,portraitFit,portraitZoom,portraitRotate,playerViewButton,rawViewButton;
-    private Button convertButton,startQueueButton,cancelButton,advancedButton,playPreviewButton,queueAutoButton,queueSameButton,queueDownloadsButton,queueFolderButton,autoTypeButton,saveAsButton;
+    private Button convertButton,startQueueButton,cancelButton,pauseQueueButton,resumeQueueButton,discardQueueButton,historyToggleButton,advancedButton,playPreviewButton,queueAutoButton,queueSameButton,queueDownloadsButton,queueFolderButton,autoTypeButton,saveAsButton;
     private EditText startTrim,endTrim;
     private CheckBox testClip,autoBarsCheck;
     private ProgressBar progress;
@@ -104,6 +104,8 @@ public class MainActivity extends Activity {
         @Override public void onReceive(Context c,Intent i){
             int p=i.getIntExtra("pct",0);
             progress.setProgress(p);
+            progress.setVisibility(i.getBooleanExtra("done",false)?View.GONE:View.VISIBLE);
+            telemetryText.setVisibility(i.getBooleanExtra("done",false)?View.GONE:View.VISIBLE);
             String msg=i.getStringExtra("msg");
             statusText.setText(msg==null?"":msg);
             String telemetry=i.getStringExtra("telemetry");
@@ -115,8 +117,13 @@ public class MainActivity extends Activity {
                 queueDownloadsButton.setEnabled(true);queueFolderButton.setEnabled(true);
             }
             cancelButton.setVisibility(done?View.GONE:View.VISIBLE);
-            stateBadge.setText(done?"READY":"CONVERTING");
-            if(done){loadHistory();loadLastResult();}
+            pauseQueueButton.setVisibility(!done&&i.getBooleanExtra("isQueue",false)?View.VISIBLE:View.GONE);
+            if(i.getBooleanExtra("pauseRequested",false)){
+                pauseQueueButton.setEnabled(false);pauseQueueButton.setText("PAUSE REQUESTED • FINISHING FILE");
+            }
+            stateBadge.setText(done?(getSharedPreferences("state",MODE_PRIVATE)
+                .getInt("pausedRemaining",0)>0?"PAUSED":"READY"):"CONVERTING");
+            if(done){loadHistory();loadLastResult();refreshPauseControls();}
         }
     };
 
@@ -125,7 +132,7 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
         performanceMode=Math.max(0,Math.min(2,getSharedPreferences("state",MODE_PRIVATE).getInt("performance",0)));
         pictureMode=PresetEngine.PictureMode.values()[Math.max(0,Math.min(2,getSharedPreferences("state",MODE_PRIVATE).getInt("picture",0)))];
-        bind(); setupUi(); setupPreview(); selfTest();loadLastResult();
+        bind(); setupUi(); setupPreview(); selfTest();loadLastResult();refreshPauseControls();
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},9);
         if(getSharedPreferences("state",MODE_PRIVATE).getBoolean("jobActive",false)){
@@ -166,6 +173,9 @@ public class MainActivity extends Activity {
         portraitFit=findViewById(R.id.portraitFit); portraitZoom=findViewById(R.id.portraitZoom); portraitRotate=findViewById(R.id.portraitRotate);
         playerViewButton=findViewById(R.id.playerViewButton); rawViewButton=findViewById(R.id.rawViewButton);
         convertButton=findViewById(R.id.convertButton); startQueueButton=findViewById(R.id.startQueueButton); cancelButton=findViewById(R.id.cancelButton);
+        pauseQueueButton=findViewById(R.id.pauseQueueButton);resumeQueueButton=findViewById(R.id.resumeQueueButton);
+        discardQueueButton=findViewById(R.id.discardQueueButton);
+        historyToggleButton=findViewById(R.id.historyToggleButton);
         advancedButton=findViewById(R.id.advancedButton); playPreviewButton=findViewById(R.id.playPreviewButton);
         startTrim=findViewById(R.id.startTrim); endTrim=findViewById(R.id.endTrim); testClip=findViewById(R.id.testClip);autoBarsCheck=findViewById(R.id.autoBarsCheck);
         progress=findViewById(R.id.progressBar); preview=findViewById(R.id.previewTexture); fallback=findViewById(R.id.fallbackImage); previewSeek=findViewById(R.id.previewSeek);
@@ -222,6 +232,23 @@ public class MainActivity extends Activity {
 
         convertButton.setOnClickListener(v->startSingleDownloads());
         saveAsButton.setOnClickListener(v->chooseOutput());cancelButton.setOnClickListener(v->cancel());
+        pauseQueueButton.setOnClickListener(v->requestQueuePause());
+        resumeQueueButton.setOnClickListener(v->resumeQueue());
+        discardQueueButton.setOnClickListener(v->new android.app.AlertDialog.Builder(this)
+            .setTitle("Discard remaining queue?")
+            .setMessage("Already finished AMV files stay saved. Only the list of files waiting to convert will be removed.")
+            .setNegativeButton("Keep queue",(d,w)->{})
+            .setPositiveButton("Discard queue",(d,w)->{
+                getSharedPreferences("state",MODE_PRIVATE).edit()
+                    .remove("pausedJob").remove("pausedRemaining").apply();
+                refreshPauseControls();stateBadge.setText("READY");
+                statusText.setText("Paused queue discarded. Completed files are unchanged.");
+            }).show());
+        historyToggleButton.setOnClickListener(v->{
+            boolean show=historyText.getVisibility()!=View.VISIBLE;
+            historyText.setVisibility(show?View.VISIBLE:View.GONE);
+            historyToggleButton.setText(show?"HIDE RECENT FILES ▴":"SHOW RECENT FILES ▾");
+        });
         advancedButton.setOnClickListener(v->toggleAdvanced());
         findViewById(R.id.exportDiagnosticsButton).setOnClickListener(v->saveDiagnostics());
         findViewById(R.id.resetDefaultsButton).setOnClickListener(v->resetDefaults());
@@ -355,7 +382,10 @@ public class MainActivity extends Activity {
         stateBadge.setText("CHECKING");
         FFmpegKit.executeAsync("-hide_banner -encoders",session->runOnUiThread(()->{
             String o=session.getOutput();
-            if(o!=null&&o.contains(" amv ")&&o.contains("adpcm_ima_amv")){stateBadge.setText("READY");statusText.setText("Engine self-test passed.");}
+            if(o!=null&&o.contains(" amv ")&&o.contains("adpcm_ima_amv")){
+                if(!ConversionService.isWorking())stateBadge.setText(
+                    getSharedPreferences("state",MODE_PRIVATE).getInt("pausedRemaining",0)>0?"PAUSED":"READY");
+                statusText.setText("Engine self-test passed.");}
             else{stateBadge.setText("WARNING");statusText.setText("Required AMV encoder is unavailable.");}
         }));
     }
@@ -472,6 +502,8 @@ public class MainActivity extends Activity {
         if(conversionActive)return;
         long gen=++sourceGeneration;
         inputUri=uri;source=null;resetPreviewState();crop=null;
+        findViewById(R.id.previewPanel).setVisibility(View.GONE);
+        sourceText.setVisibility(View.GONE);estimateText.setVisibility(View.GONE);
         stateBadge.setText("INSPECTING");
         convertButton.setEnabled(false);
         statusText.setText("Inspecting source…");
@@ -485,6 +517,8 @@ public class MainActivity extends Activity {
                     return;
                 }
                 source=info;
+                findViewById(R.id.previewPanel).setVisibility(View.VISIBLE);
+                sourceText.setVisibility(View.VISIBLE);estimateText.setVisibility(View.VISIBLE);
                 autoPicture=PresetEngine.PictureMode.SHARP;
                 autoReason=pictureMode==PresetEngine.PictureMode.AUTO?
                     "Analyzing in background":"Manual processing selected";
@@ -862,6 +896,7 @@ public class MainActivity extends Activity {
         if(queueUris.isEmpty()||!queueReady||conversionActive)return; Intent i=baseServiceIntent(); ArrayList<String> arr=new ArrayList<>();for(Uri u:queueUris)arr.add(u.toString());
         i.putStringArrayListExtra(ConversionService.EXTRA_INPUTS,arr); if(tree!=null)i.putExtra(ConversionService.EXTRA_TREE,tree.toString());
         i.putExtra(ConversionService.EXTRA_DOWNLOADS,downloads); i.putExtra(ConversionService.EXTRA_QUEUE_AUTO,queueAuto);
+        i.putExtra("wasQueue",true);
         i.removeExtra("manualCropW");i.removeExtra("manualCropH");i.removeExtra("manualCropX");i.removeExtra("manualCropY");
         i.putExtra(ConversionService.EXTRA_START,0.0);i.putExtra(ConversionService.EXTRA_END,0.0);i.putExtra(ConversionService.EXTRA_TEST,false);
         startServiceCompat(i);
@@ -891,6 +926,10 @@ public class MainActivity extends Activity {
         convertButton.setEnabled(false);queueDownloadsButton.setEnabled(false);queueFolderButton.setEnabled(false);
         if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);
         stateBadge.setText("CONVERTING");cancelButton.setVisibility(View.VISIBLE);progress.setProgress(0);
+        progress.setVisibility(View.VISIBLE);telemetryText.setVisibility(View.VISIBLE);
+        pauseQueueButton.setEnabled(true);pauseQueueButton.setText("PAUSE AFTER CURRENT FILE");
+        pauseQueueButton.setVisibility(i.hasExtra(ConversionService.EXTRA_INPUTS)||ConversionService.ACTION_RESUME.equals(i.getAction())?View.VISIBLE:View.GONE);
+        resumeQueueButton.setVisibility(View.GONE);discardQueueButton.setVisibility(View.GONE);
         telemetryText.setText("CPU: "+(performanceMode==2?"Maximum":performanceMode==1?"Faster":"Standard")+" • Checking thermal/battery…");
         statusText.setText("Conversion started. Safe to leave app or turn screen off.");
     }
@@ -911,25 +950,59 @@ public class MainActivity extends Activity {
         style();
     }
     private void cancel(){Intent i=new Intent(this,ConversionService.class);i.setAction(ConversionService.ACTION_CANCEL);startService(i);}
+    private void requestQueuePause(){
+        if(!ConversionService.isWorking()&&!conversionActive)return;
+        Intent pause=new Intent(this,ConversionService.class);
+        pause.setAction(ConversionService.ACTION_PAUSE_AFTER_CURRENT);
+        startService(pause);
+        pauseQueueButton.setEnabled(false);
+        pauseQueueButton.setText("PAUSE REQUESTED • FINISHING FILE");
+        statusText.setText("Current file will finish and be verified before the queue pauses.");
+    }
+    private void resumeQueue(){
+        if(ConversionService.isWorking())return;
+        if(getSharedPreferences("state",MODE_PRIVATE).getString("pausedJob","").isEmpty()){
+            refreshPauseControls();return;
+        }
+        Intent resume=new Intent(this,ConversionService.class);
+        resume.setAction(ConversionService.ACTION_RESUME);
+        startServiceCompat(resume);
+        statusText.setText("Resuming remaining files. Completed AMVs are kept.");
+    }
+    private void refreshPauseControls(){
+        if(pauseQueueButton==null||resumeQueueButton==null||discardQueueButton==null)return;
+        boolean running=ConversionService.isWorking();
+        int remaining=getSharedPreferences("state",MODE_PRIVATE).getInt("pausedRemaining",0);
+        resumeQueueButton.setVisibility(!running&&remaining>0?View.VISIBLE:View.GONE);
+        discardQueueButton.setVisibility(!running&&remaining>0?View.VISIBLE:View.GONE);
+        if(running){
+            boolean queue=getSharedPreferences("state",MODE_PRIVATE).getBoolean("activeQueue",false);
+            pauseQueueButton.setVisibility(queue?View.VISIBLE:View.GONE);
+        }else pauseQueueButton.setVisibility(View.GONE);
+        if(remaining>0)resumeQueueButton.setText("RESUME "+remaining+" REMAINING FILE"+(remaining==1?"":"S"));
+    }
     private void toggleAdvanced(){
         advanced=!advanced;
         int visible=advanced?View.VISIBLE:View.GONE;
         findViewById(R.id.customizePrimaryPanel).setVisibility(visible);
         findViewById(R.id.customizeOutputPanel).setVisibility(visible);
         findViewById(R.id.advancedPanel).setVisibility(visible);
-        advancedButton.setText(advanced?"CUSTOMIZE ▴":"CUSTOMIZE ▾");
+        advancedButton.setText(advanced?"CUSTOMIZE ▴":"CUSTOMIZE ▾ • OPTIONAL SETTINGS");
     }
     private void resetDefaults(){typeAuto=true;type=PresetEngine.Type.YOUTUBE;mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;frameMode=PresetEngine.FrameMode.AUTO;pictureMode=PresetEngine.PictureMode.AUTO;subtitleMode=SubtitleSupport.OFF;subtitleSize=SubtitleSupport.LARGE;autoBarsCheck.setChecked(true);getSharedPreferences("state",MODE_PRIVATE).edit().putInt("picture",0).apply();queueAuto=true;setPerformance(0);refresh();}
 
     private String sourceBlock(PresetEngine.SourceInfo s){return "SOURCE\n"+s.width+"×"+s.height+"\n"+String.format(Locale.US,"%.3f fps",s.fps)+"\n"+String.format(Locale.US,"%.2f:1",s.ratio())+"\n"+(s.image?"IMAGE":fmtTime(s.durationSeconds))+"\nInput: "+human(s.inputBytes);}
-    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.7.0 RC4 source\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+effectiveType(source,inputUri)+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\nSubtitles: "+subtitleMode+" size "+subtitleSize+"\nAuto bars: "+autoBarsCheck.isChecked()+
+    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.7.0 final source\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+effectiveType(source,inputUri)+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\nSubtitles: "+subtitleMode+" size "+subtitleSize+"\nAuto bars: "+autoBarsCheck.isChecked()+
         "\nNative last encode: "+String.format(Locale.US,"%.2fx",getSharedPreferences("state",MODE_PRIVATE).getFloat("lastEncodeSpeed",0))+
         " ("+getSharedPreferences("state",MODE_PRIVATE).getLong("lastEncodeWallMs",0)+" ms encoder only)"+
         "\nLast encoded filter: "+getSharedPreferences("state",MODE_PRIVATE).getString("lastEncodeFilter","-")+
         "\nEquivalent built-in FFmpeg command (input/output placeholders): "+PresetEngine.buildVideoCommand(
             "INPUT","OUTPUT",p,parseTime(startTrim.getText().toString()),
             parseTime(endTrim.getText().toString()),testClip.isChecked(),performanceMode)+"\n";}
-    private void loadHistory(){String h=getSharedPreferences("history",MODE_PRIVATE).getString("items","");historyText.setText("RECENT\n"+(h.isEmpty()?"No conversions yet.":h));}
+    private void loadHistory(){String h=getSharedPreferences("history",MODE_PRIVATE).getString("items","");
+        // Keep the real .amv file extension; hide it only in the app's recent-file labels.
+        h=h.replaceAll("(?i)\\.amv(?=\\s|$|—)","");
+        historyText.setText("RECENT\n"+(h.isEmpty()?"No conversions yet.":h));}
     private void loadLastResult(){
         if(ConversionService.isWorking())return;
         String result=getSharedPreferences("state",MODE_PRIVATE).getString("lastResult","");
@@ -961,11 +1034,12 @@ public class MainActivity extends Activity {
         conversionActive=ConversionService.isWorking();
         if(!conversionActive)getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
         if(conversionActive){
+            progress.setVisibility(View.VISIBLE);telemetryText.setVisibility(View.VISIBLE);
             convertButton.setEnabled(false);queueDownloadsButton.setEnabled(false);queueFolderButton.setEnabled(false);
             if(preview.isPlaying())preview.toggle();
             previewAutoplayWhenReady=false;
         }
-        IntentFilter f=new IntentFilter(ConversionService.ACTION_PROGRESS);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);loadHistory();}
+        IntentFilter f=new IntentFilter(ConversionService.ACTION_PROGRESS);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);loadHistory();loadLastResult();refreshPauseControls();}
     @Override protected void onStop(){try{unregisterReceiver(receiver);}catch(Exception ignored){}super.onStop();}
     @Override protected void onDestroy(){
         // Async preview and inspection callbacks must not update a destroyed Activity.

@@ -1,3 +1,11 @@
+## ClipAMV v0.7.0 (Final candidate)
+
+Convert video to Ruizu/Clip Sport Gen 2 compatible AMV on Android. **Auto** recommends a preset for each video, **Customize** reveals manual framing/picture quality/FPS/subtitles and diagnostics, and batch conversion supports **Pause after current file → Resume remaining files** without reconverting completed outputs. Converted AMVs are verified for packet structure and seekability before publishing. Files are saved in Downloads by default and display names are shortened to 16 characters (excluding `.amv`).
+
+**APK download:** GitHub Actions → **ClipAMV Final APK** → artifact **ClipAMV-Final-APK** → `ClipAMV.apk` (debug-signed). **Required before public release:** verify Android build and on-player pause/resume/seek QA. See `CLIPAMV_FINAL_RELEASE_NOTES.md`.
+
+---
+
 # ClipAMV v0.6.4 — release candidate
 
 This candidate builds on v0.6.3 and preserves the 320×240 Gen 2 AMV presets,

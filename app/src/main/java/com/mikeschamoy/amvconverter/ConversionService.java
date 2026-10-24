@@ -19,9 +19,13 @@ import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.*;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class ConversionService extends Service {
     public static final String ACTION_CANCEL="com.mikeschamoy.amvconverter.CANCEL";
+    public static final String ACTION_PAUSE_AFTER_CURRENT="com.mikeschamoy.amvconverter.PAUSE_AFTER_CURRENT";
+    public static final String ACTION_RESUME="com.mikeschamoy.amvconverter.RESUME";
     public static final String ACTION_PROGRESS="com.mikeschamoy.amvconverter.PROGRESS";
     public static final String EXTRA_INPUT="input",EXTRA_INPUTS="inputs",EXTRA_OUTPUT="output",EXTRA_TREE="tree";
     public static final String EXTRA_TYPE="type",EXTRA_MODE="mode",EXTRA_HEIGHT="height",EXTRA_FPS="fps";
@@ -34,6 +38,8 @@ public class ConversionService extends Service {
     private static volatile boolean working=false;
     public static boolean isWorking(){return working;}
     private volatile boolean cancelRequested=false;
+    private volatile boolean pauseRequested=false;
+    private volatile boolean activeQueue=false;
     private volatile long currentSessionId=-1;
     private volatile int lastAuxiliaryStartId=0;
     private volatile int performanceMode=0;
@@ -45,24 +51,54 @@ public class ConversionService extends Service {
 
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent==null){if(!working)stopSelfResult(startId);return START_NOT_STICKY;}
+        if(ACTION_PAUSE_AFTER_CURRENT.equals(intent.getAction())){
+            if(working&&activeQueue){
+                lastAuxiliaryStartId=startId;
+                pauseRequested=true;
+                ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFY_ID,
+                    notification(0,"Pause requested • finishing current file safely"));
+            }else if(!working)stopSelfResult(startId);
+            return START_NOT_STICKY;
+        }
         if(ACTION_CANCEL.equals(intent.getAction())){
+            // Cancel only the currently running job; a separate paused queue stays saved.
             if(working)lastAuxiliaryStartId=startId;
             cancelRequested=true;
             if(currentSessionId>0)FFmpegKit.cancel(currentSessionId);
             if(!working)stopSelfResult(startId);
             return START_NOT_STICKY;
         }
-        startFg("Preparing…",0);
         if(working){lastAuxiliaryStartId=startId;return START_NOT_STICKY;}
+        boolean resuming=ACTION_RESUME.equals(intent.getAction());
+        if(resuming){
+            startFg("Restoring paused queue…",0);
+            Intent pending=readPausedJob();
+            if(pending==null){
+                stopForeground(true);
+                notifyDone("ClipAMV • Nothing to resume","Select a new queue to start converting.");
+                update(0,1,0,0,0,"No saved queue could be restored",true);
+                stopSelfResult(startId);
+                return START_NOT_STICKY;
+            }
+            intent=pending;
+        }
+        // Running an unrelated conversion must not discard a saved paused queue.
+        if(resuming)getSharedPreferences("state",MODE_PRIVATE).edit()
+            .remove("pausedJob").remove("pausedRemaining").apply();
+        startFg("Preparing…",0);
         working=true;
         lastAuxiliaryStartId=0;
         cancelRequested=false;
+        pauseRequested=false;
+        activeQueue=intent.getBooleanExtra("wasQueue",false)||
+            (intent.getStringArrayListExtra(EXTRA_INPUTS)!=null&&intent.getStringArrayListExtra(EXTRA_INPUTS).size()>1);
         performanceMode=Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_PERFORMANCE,0)));
         lastProgressUpdateMs=0;
 
-        getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",true).apply();
+        getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",true).putBoolean("activeQueue",activeQueue).apply();
+        final Intent jobIntent=intent;
         new Thread(()->{
-            try{acquireWake();runJobs(intent,startId);}
+            try{acquireWake();runJobs(jobIntent,startId);}
             catch(Exception e){
                 String reason="Unexpected error: "+e.getClass().getSimpleName()+
                     (e.getMessage()==null?"":": "+e.getMessage());
@@ -88,6 +124,7 @@ public class ConversionService extends Service {
 
     private void runJobs(Intent intent,int startId){
         lastFailureReason="";
+        final long jobStartMs=SystemClock.elapsedRealtime();
         recordFailure("No FFmpeg error recorded for current conversion", "");
         ArrayList<String> inputs=intent.getStringArrayListExtra(EXTRA_INPUTS);
         if(inputs==null){
@@ -115,9 +152,10 @@ public class ConversionService extends Service {
         int subtitleMode=Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_SUBTITLE_MODE,SubtitleSupport.OFF)));
         int subtitleSize=Math.max(0,Math.min(1,intent.getIntExtra(EXTRA_SUBTITLE_SIZE,SubtitleSupport.LARGE)));
 
-        int total=inputs.size(),fail=0,completed=0;
+        int total=inputs.size(),fail=0,completed=0,processed=0,imagesCompleted=0;
         String lastName=""; long lastBytes=0,totalBytes=0;
-        for(int i=0;i<total&&!cancelRequested;i++){
+        for(int i=0;i<total&&QueuePausePolicy.shouldStart(i,cancelRequested,pauseRequested);i++){
+            processed=i+1;
             lastFailureReason="";
             Uri in=Uri.parse(inputs.get(i));
             String original=displayName(in);
@@ -202,7 +240,7 @@ public class ConversionService extends Service {
                 update(i,total,99,0,0,"Copying verified "+outName+" to destination",false);
                 long bytes=copyToOutput(stage,out);
                 if(downloads&&!chosenDocument)publishDownload(out);
-                completed++;lastName=displayName(out);lastBytes=bytes;totalBytes+=bytes;
+                completed++;if(info.image)imagesCompleted++;lastName=displayName(out);lastBytes=bytes;totalBytes+=bytes;
                 addHistory("✓ "+outName+" — "+human(bytes)+
                     " • full structure/seek checks passed");
             }catch(Exception e){
@@ -218,8 +256,20 @@ public class ConversionService extends Service {
 
         }
 
+        boolean paused=QueuePausePolicy.hasRemaining(total,processed,cancelRequested,pauseRequested);
+        if(paused){
+            ArrayList<String> remaining=QueuePausePolicy.remaining(inputs,processed);
+            try{savePausedJob(intent,remaining);}catch(Exception ex){
+                paused=false;fail++;
+                lastFailureReason="Could not save paused queue: "+ex.getMessage();
+                recordFailure(lastFailureReason);
+            }
+        }
         String title,msg;
-        if(cancelRequested){
+        if(paused){
+            title="ClipAMV • Queue paused";
+            msg="Saved "+completed+" • "+(total-processed)+" remaining • Tap Resume in app";
+        }else if(cancelRequested){
             title="ClipAMV • Cancelled";
             msg="Finished "+completed+"/"+total+" files before cancellation";
         }else if(total==1 && completed==1){
@@ -234,11 +284,13 @@ public class ConversionService extends Service {
         }
         String display=lastName.replaceFirst("(?i)\\.(amv|jpg)$","");
         String destination=downloads?"Downloads":(tree!=null?"Selected folder":"Chosen document");
-        String result=(cancelRequested?"CANCELLED":fail>0||completed==0?"FINISHED WITH ERRORS":"CONVERSION COMPLETE")+
+        String result=(paused?"QUEUE PAUSED":cancelRequested?"CANCELLED":fail>0||completed==0?"FINISHED WITH ERRORS":"CONVERSION COMPLETE")+
             "\nFiles: "+completed+" of "+total+" saved"+(fail>0?" • "+fail+" failed":"")+
+            (paused?"\nRemaining: "+(total-processed)+" • Resume from the app":"")+
+            "\nElapsed: "+eta(Math.max(0,(SystemClock.elapsedRealtime()-jobStartMs)/1000))+
             (completed>0?"\nLast: "+display+" • "+human(lastBytes)+"\nTotal: "+human(totalBytes):"")+
             "\nSaved to: "+destination+
-            (completed>0?"\nChecks: AMV structure and seek verified before publishing":"")+
+            (completed>0?"\nChecks: "+(imagesCompleted==completed?"Image format validated":imagesCompleted>0?"AMV structure/seek and image format validated":"AMV structure and seek verified before publishing"):"")+
             (fail>0?"\nIssue: "+lastFailureReason:"");
         getSharedPreferences("state",MODE_PRIVATE).edit().putString("lastResult",result).apply();
         int finalPercent=total>0?(int)Math.round(100.0*completed/total):0;
@@ -329,6 +381,44 @@ public class ConversionService extends Service {
             return false;
         }
         return true;
+    }
+
+    // Pause is a checkpoint between complete, verified files. Never preserve partial encodes.
+    private static final String[] QUEUE_INTS={EXTRA_TYPE,EXTRA_MODE,EXTRA_HEIGHT,EXTRA_FPS,EXTRA_PORTRAIT,
+        EXTRA_PERFORMANCE,EXTRA_FRAME_MODE,EXTRA_PICTURE_MODE,EXTRA_SUBTITLE_MODE,EXTRA_SUBTITLE_SIZE};
+    private static final String[] QUEUE_BOOLS={EXTRA_43,EXTRA_AUTOBARS,EXTRA_DOWNLOADS,
+        EXTRA_QUEUE_AUTO,EXTRA_AUTO_TYPE,"wasQueue"};
+    private static final String[] QUEUE_DOUBLES={EXTRA_START,EXTRA_END};
+    private static final String[] QUEUE_STRINGS={EXTRA_TREE};
+    private void savePausedJob(Intent original,ArrayList<String> remaining) throws Exception{
+        JSONObject obj=new JSONObject();JSONArray names=new JSONArray();
+        for(String name:remaining)names.put(name);
+        obj.put("inputs",names);
+        for(String k:QUEUE_INTS)obj.put(k,original.getIntExtra(k,0));
+        for(String k:QUEUE_BOOLS)obj.put(k,original.getBooleanExtra(k,false));
+        for(String k:QUEUE_DOUBLES)obj.put(k,original.getDoubleExtra(k,0));
+        for(String k:QUEUE_STRINGS)if(original.hasExtra(k))obj.put(k,original.getStringExtra(k));
+        // commit makes the resume control durable before the paused notification is sent.
+        boolean saved=getSharedPreferences("state",MODE_PRIVATE).edit()
+            .putString("pausedJob",obj.toString()).putInt("pausedRemaining",remaining.size()).commit();
+        if(!saved)throw new IOException("Checkpoint storage unavailable");
+    }
+    private Intent readPausedJob(){
+        String raw=getSharedPreferences("state",MODE_PRIVATE).getString("pausedJob","");
+        if(raw.isEmpty())return null;
+        try{
+            JSONObject obj=new JSONObject(raw);JSONArray names=obj.getJSONArray("inputs");
+            if(names.length()==0)return null;
+            Intent restored=new Intent(this,ConversionService.class);
+            ArrayList<String> inputs=new ArrayList<>();
+            for(int i=0;i<names.length();i++)inputs.add(names.getString(i));
+            restored.putStringArrayListExtra(EXTRA_INPUTS,inputs);
+            for(String k:QUEUE_INTS)restored.putExtra(k,obj.getInt(k));
+            for(String k:QUEUE_BOOLS)restored.putExtra(k,obj.getBoolean(k));
+            for(String k:QUEUE_DOUBLES)restored.putExtra(k,obj.getDouble(k));
+            for(String k:QUEUE_STRINGS)if(obj.has(k))restored.putExtra(k,obj.getString(k));
+            return restored;
+        }catch(Exception e){android.util.Log.e("ClipAMV","Unreadable paused queue",e);return null;}
     }
 
     private long copyToOutput(File source,Uri output) throws IOException {
@@ -575,8 +665,34 @@ public class ConversionService extends Service {
         try{
             String docId=DocumentsContract.getTreeDocumentId(tree);
             Uri parent=DocumentsContract.buildDocumentUriUsingTree(tree,docId);
-            return DocumentsContract.createDocument(getContentResolver(),parent,image?"image/jpeg":"application/octet-stream",name);
+            String safeName=uniqueTreeName(tree,docId,name);
+            return DocumentsContract.createDocument(getContentResolver(),parent,image?"image/jpeg":"application/octet-stream",safeName);
         }catch(Exception e){return null;}
+    }
+
+    private String uniqueTreeName(Uri tree,String docId,String name){
+        String ext=name.toLowerCase(Locale.US).endsWith(".jpg")?".jpg":".amv";
+        String base=name.substring(0,Math.max(0,name.length()-ext.length()));
+        HashSet<String> existing=new HashSet<>();
+        Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,docId);
+        try(Cursor cursor=getContentResolver().query(children,
+            new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)){
+            if(cursor!=null)while(cursor.moveToNext()){
+                String item=cursor.getString(0);
+                if(item!=null)existing.add(item.toLowerCase(Locale.US));
+            }
+        }catch(Exception err){
+            // Storage providers may not permit listing; createDocument normally chooses a unique name.
+            android.util.Log.w("ClipAMV","Could not enumerate folder for duplicates",err);
+            return name;
+        }
+        if(!existing.contains(name.toLowerCase(Locale.US)))return name;
+        for(int n=2;n<=999;n++){
+            String suffix="-"+n;
+            String candidate=base.substring(0,Math.min(base.length(),Math.max(1,16-suffix.length())))+suffix+ext;
+            if(!existing.contains(candidate.toLowerCase(Locale.US)))return candidate;
+        }
+        return name;
     }
 
     private void update(int index,int total,int pct,double speed,long eta,String label,boolean done){
@@ -587,7 +703,7 @@ public class ConversionService extends Service {
                 " • CPU: "+performanceLabel()+" • Thermal: "+thermalLabel()+" • Battery: "+batteryLabel();
         Intent i=new Intent(ACTION_PROGRESS);i.setPackage(getPackageName());
         i.putExtra("pct",pct);i.putExtra("overall",overall);i.putExtra("msg",msg);i.putExtra("done",done);
-        i.putExtra("telemetry",tele);sendBroadcast(i);
+        i.putExtra("telemetry",tele);i.putExtra("isQueue",activeQueue);i.putExtra("pauseRequested",pauseRequested);sendBroadcast(i);
     }
 
     private void startFg(String msg,int pct){
@@ -600,10 +716,14 @@ public class ConversionService extends Service {
         PendingIntent open=PendingIntent.getActivity(this,1,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         Intent ci=new Intent(this,ConversionService.class);ci.setAction(ACTION_CANCEL);
         PendingIntent cancel=PendingIntent.getService(this,2,ci,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
+        Intent pi=new Intent(this,ConversionService.class);pi.setAction(ACTION_PAUSE_AFTER_CURRENT);
+        PendingIntent pause=PendingIntent.getService(this,3,pi,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
         b.setContentTitle("ClipAMV").setContentText(text).setSmallIcon(R.drawable.ic_stat_clipamv)
                 .setContentIntent(open).setOnlyAlertOnce(true).setOngoing(pct<100)
                 .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel,"Cancel",cancel).build());
+        if(activeQueue&&!pauseRequested)
+            b.addAction(new Notification.Action.Builder(android.R.drawable.ic_media_pause,"Pause after file",pause).build());
         if(pct>0&&pct<100)b.setProgress(100,pct,false);else if(pct==0)b.setProgress(0,0,true);
         return b.build();
     }
