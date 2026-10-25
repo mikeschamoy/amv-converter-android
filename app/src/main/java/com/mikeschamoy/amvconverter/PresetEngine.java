@@ -2,7 +2,11 @@ package com.mikeschamoy.amvconverter;
 import java.util.Locale;
 
 public final class PresetEngine {
-    public static final String PRESET_VERSION="4.2";
+    public static final String PRESET_VERSION="4.3";
+    // Hard limit for the actual image region inside the 320x240 AMV canvas.
+    // This takes precedence over Auto/Fit/Fill/Balanced and height overrides.
+    public static final int MIN_PICTURE_HEIGHT=184;
+    public static final int MAX_PICTURE_HEIGHT=216;
     public enum Type { YOUTUBE, MOVIE_SHOW, CARTOON, PORTRAIT }
     public enum Mode { SPACE_SAVER, STANDARD, QUALITY }
     public enum FrameMode { FIT, FILL, AUTO, BALANCED }
@@ -80,8 +84,8 @@ public final class PresetEngine {
         int h=heightOverride;
         boolean fourThree=s.isFourThree()&&type!=Type.PORTRAIT;
         boolean portrait=type==Type.PORTRAIT||s.isPortrait();
-        if(fourThree){if(h<=0)h=preserve43?216:240;p.fourThree=true;p.fourThreePreserve=preserve43;}
-        else if(portrait){if(h<=0)h=portraitMode==PortraitMode.ROTATE?216:240;}
+        if(fourThree){if(h<=0)h=216;p.fourThree=true;p.fourThreePreserve=preserve43;}
+        else if(portrait){if(h<=0)h=216;}
         else if(h<=0){
             double ratio=s.ratio();
             if(type==Type.YOUTUBE)h=208;
@@ -91,7 +95,7 @@ public final class PresetEngine {
             else if(ratio<=2.15)h=192;
             else h=184;
         }
-        h=Math.max(2,Math.min(240,h));if(h%2!=0)h--;
+        h=Math.max(MIN_PICTURE_HEIGHT,Math.min(MAX_PICTURE_HEIGHT,h));if(h%2!=0)h--;
         p.requestedHeight=h;
         // Resolve framing per source, independently of picture processing and queue mode.
         double ratio=s.ratio();
@@ -111,14 +115,23 @@ public final class PresetEngine {
         boolean rotate=portrait&&portraitMode==PortraitMode.ROTATE;
         boolean zoom=chosen!=FrameMode.FIT||(portrait&&portraitMode==PortraitMode.ZOOM);
         if(portrait&&portraitMode==PortraitMode.FIT&&framing==FrameMode.AUTO){chosen=FrameMode.FIT;zoom=false;p.frameMode=chosen;}
-        // BALANCED caps horizontal loss at approximately one third of the source.
+        // BALANCED may reduce crop, but never below the user's minimum.
         int pictureH=h;
         if(chosen==FrameMode.BALANCED && ratio>1.0){
             int cap=evenFloor(256.0/(ratio*0.67));
-            pictureH=Math.min(h,Math.max(2,cap));
+            pictureH=Math.min(h,Math.max(MIN_PICTURE_HEIGHT,cap));
+        }
+        // A full-width FIT on widescreen footage can otherwise produce e.g.
+        // 256x144 (or 256x164). In that case the minimum height wins: crop
+        // horizontally instead of shrinking the picture below 184.
+        int fitHeight=Math.min(h,evenFloor(256.0/ratio));
+        if(!zoom && fitHeight<MIN_PICTURE_HEIGHT){
+            zoom=true;
+            chosen=FrameMode.FILL;
+            p.frameMode=chosen;
         }
         p.visibleHeight=h;
-        p.pictureHeight=zoom?pictureH:Math.min(h,evenFloor(256.0/ratio));
+        p.pictureHeight=zoom?pictureH:fitHeight;
         p.pictureWidth=zoom?256:Math.min(256,evenFloor(256.0,p.pictureHeight*ratio));
         p.horizontalCropPercent=zoom?Math.max(0,100.0*(1-256.0/(Math.max(1e-6,ratio)*pictureH))):0;
         // Avoid an unnecessary full-resolution rescale for common square-pixel sources.

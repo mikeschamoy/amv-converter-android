@@ -17,7 +17,10 @@ public final class PresetEngineRegression {
                     check(p.filter.contains("setsar=1"),"square pixel reset missing");
                     check(p.filter.contains(pm==PresetEngine.PictureMode.SMOOTH?"flags=bicubic":"flags=lanczos"),"wrong scaler");
                     check(p.filter.contains("scale=-2:")||p.filter.contains("scale=256:-2"),"scale must retain source aspect without double resizing");
-                    check(p.pictureWidth>0&&p.pictureWidth<=256 && p.pictureHeight>0&&p.pictureHeight<=240,"invalid visible geometry");
+                    check(p.pictureWidth>0&&p.pictureWidth<=256 &&
+                        p.pictureHeight>=PresetEngine.MIN_PICTURE_HEIGHT&&
+                        p.pictureHeight<=PresetEngine.MAX_PICTURE_HEIGHT,"height escaped 184..216: "+p.pictureHeight);
+                    check(p.requestedHeight>=184&&p.requestedHeight<=216,"requested height escaped guardrails");
                     check(p.outputFps==25,"manual FPS lost");
                     cases++;
                 }
@@ -36,21 +39,47 @@ public final class PresetEngineRegression {
         PresetEngine.Preset explicitFit=PresetEngine.choose(yt,PresetEngine.Type.YOUTUBE,
                 PresetEngine.Mode.STANDARD,208,30,false,PresetEngine.PortraitMode.FIT,null,
                 PresetEngine.FrameMode.FIT,PresetEngine.PictureMode.SHARP);
-        check(explicitFit.pictureHeight==144,"explicit FIT should accurately report 144px");
+        check(explicitFit.pictureHeight==208 && explicitFit.frameMode==PresetEngine.FrameMode.FILL,
+                "FIT must yield to minimum visible height when widescreen (not 144px)");
         PresetEngine.SourceInfo cinema=new PresetEngine.SourceInfo();
         cinema.width=1920;cinema.height=800;cinema.fps=24;cinema.audioPresent=true;
         PresetEngine.Preset cin=PresetEngine.choose(cinema,PresetEngine.Type.MOVIE_SHOW,
                 PresetEngine.Mode.STANDARD,184,25,false,PresetEngine.PortraitMode.FIT,null,
                 PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
         check(cin.frameMode==PresetEngine.FrameMode.BALANCED,"scope movie should be balanced");
-        check(cin.horizontalCropPercent<=33.5,"scope auto cropped too much horizontally");
+        check(cin.pictureHeight==184,"scope movie must preserve minimum 184px");
+        // Reproduces Crystal Lake S01E01: a 1920x1080 source whose black-bar
+        // scan found a 1920x832 active region previously became 256x164.
+        PresetEngine.SourceInfo crystal=new PresetEngine.SourceInfo();
+        crystal.width=1920;crystal.height=1080;crystal.fps=24000.0/1001;crystal.audioPresent=true;
+        PresetEngine.Preset crystalBeforeScan=PresetEngine.choose(crystal,PresetEngine.Type.MOVIE_SHOW,
+                PresetEngine.Mode.STANDARD,0,0,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
+        PresetEngine.Preset crystalAfterScan=PresetEngine.choose(crystal,PresetEngine.Type.MOVIE_SHOW,
+                PresetEngine.Mode.STANDARD,0,0,false,PresetEngine.PortraitMode.FIT,
+                new PresetEngine.Crop(1920,832,0,124),PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
+        check(crystalBeforeScan.pictureHeight==216,"pre-scan full-screen estimate changed");
+        check(crystalAfterScan.pictureHeight==184,"Crystal Lake 164px regression returned: "+crystalAfterScan.pictureHeight);
+        check(crystalAfterScan.filter.contains("crop=256:184:"),
+                "encoded crop must use actual 184px target");
+        check(crystalAfterScan.filter.contains("crop=1920:832:0:124"),
+                "detected source letterbox crop must be retained");
+        // Even older explicit overrides outside the range are clamped.
+        PresetEngine.Preset low=PresetEngine.choose(crystal,PresetEngine.Type.MOVIE_SHOW,
+                PresetEngine.Mode.STANDARD,144,25,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.FIT,PresetEngine.PictureMode.SHARP);
+        PresetEngine.Preset high=PresetEngine.choose(crystal,PresetEngine.Type.MOVIE_SHOW,
+                PresetEngine.Mode.STANDARD,240,25,false,PresetEngine.PortraitMode.FIT,null,
+                PresetEngine.FrameMode.FILL,PresetEngine.PictureMode.SHARP);
+        check(low.pictureHeight==184&&low.requestedHeight==184,"144px override not clamped to 184");
+        check(high.pictureHeight==216&&high.requestedHeight==216,"240px override not clamped to 216");
         PresetEngine.SourceInfo tv=new PresetEngine.SourceInfo();
         tv.width=640;tv.height=480;tv.fps=25;tv.audioPresent=true;
         PresetEngine.Preset fourThreeFull=PresetEngine.choose(tv,PresetEngine.Type.YOUTUBE,
                 PresetEngine.Mode.STANDARD,0,25,false,PresetEngine.PortraitMode.FIT,null,
                 PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
-        check(fourThreeFull.frameMode==PresetEngine.FrameMode.FILL && fourThreeFull.pictureHeight==240,
-                "4:3 FULL did not fill 240px high");
+        check(fourThreeFull.frameMode==PresetEngine.FrameMode.FILL && fourThreeFull.pictureHeight==216,
+                "4:3 FULL exceeded 216px height limit");
         PresetEngine.Preset fourThreePreserve=PresetEngine.choose(tv,PresetEngine.Type.YOUTUBE,
                 PresetEngine.Mode.STANDARD,0,25,true,PresetEngine.PortraitMode.FIT,null,
                 PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);

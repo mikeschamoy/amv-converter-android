@@ -480,7 +480,10 @@ public class MainActivity extends Activity {
         if(info!=null){
             PresetEngine.Type itemType=queueAuto?AutoSelection.choose(info,name):effectiveType(info,uri);
             PresetEngine.Preset rec=PresetEngine.choose(info,itemType,mode,heightOverride,fpsOverride,preserve43,portraitMode,null,frameMode,effectivePicture());
-            meta=info.width+"×"+info.height+" • "+String.format(Locale.US,"%.3f",info.fps)+" fps • "+rec.name;
+            // Queue is inspected for metadata only. Black-bar detection is done later
+            // per file in ConversionService, so this is not the final picture size.
+            meta=info.width+"×"+info.height+" • "+String.format(Locale.US,"%.3f",info.fps)+
+                " fps • preview "+rec.pictureHeight+"px • final picture 184–216px after scan";
         }
         boolean odd=first!=null&&info!=null&&(Math.abs(first.ratio()-info.ratio())>0.08||Math.abs(first.fps-info.fps)>3.0);
         b.setText((index+1)+". "+name+"\n"+meta+(odd?"  ⚠ differs":""));
@@ -792,11 +795,14 @@ public class MainActivity extends Activity {
 
     private void refresh(){
         if(source==null)return; PresetEngine.Preset p=preset();
-        reasonText.setText(PresetEngine.explain(source,effectiveType(source,inputUri),p)+" • X64 calibrated • "+(frameMode==PresetEngine.FrameMode.AUTO?"AUTO→"+p.frameMode.name():p.frameMode.name())+" • picture "+p.pictureWidth+"×"+p.pictureHeight+" (target "+p.requestedHeight+"px) • 320×240 AMV");
+        reasonText.setText(PresetEngine.explain(source,effectiveType(source,inputUri),p)+
+            " • X64 calibrated • picture "+p.pictureWidth+"×"+p.pictureHeight+
+            (autoBarsCheck.isChecked()&&crop==null&&!source.image?" pre-scan estimate; final picture height 184–216px":" picture height guarded 184–216px")+
+            " • 320×240 AMV");
         outputNameText.setText("OUTPUT\n"+FileNameCleaner.clean(displayName(inputUri),effectiveType(source,inputUri),source.image));
         autoSummaryText.setText((typeAuto?"AUTO SELECTION":"CUSTOM SETTINGS")+"  •  "+effectiveType(source,inputUri).name().replace('_',' ')+
-            "\n"+p.requestedHeight+"px • "+p.outputFps+" fps • "+p.frameMode.name()+
-            " framing • "+(pictureMode==PresetEngine.PictureMode.AUTO?"picture Auto":pictureMode.name())+
+            "\nPicture height 184–216px • "+p.outputFps+" fps • "+
+            (pictureMode==PresetEngine.PictureMode.AUTO?"picture Auto":pictureMode.name())+
             "\nOutput: "+FileNameCleaner.displayBase(displayName(inputUri),effectiveType(source,inputUri),source.image));
         presetText.setText("Preset Engine "+PresetEngine.PRESET_VERSION+"\n"+p.name+"\n"+p.filter+(p.q>0?"\nq="+p.q:""));
         latestDiagnostics=diagnostics(p); style(); refreshPreview(); refreshEstimate(); refreshQueueEstimate(); if(queueInfo.size()==queueUris.size()&&!queueInfo.isEmpty())rebuildQueueRows();
@@ -833,7 +839,8 @@ public class MainActivity extends Activity {
             PresetEngine.Preset p=PresetEngine.choose(info,t,mode,h,f,preserve43,portraitMode,null,frameMode,effectivePicture());
             out+=PresetEngine.estimateBytes(info,p,info.durationSeconds);
         }}
-        queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\nInput "+human(in)+" • Est. "+human((long)(out*.90))+"–"+human((long)(out*1.10))+" • "+(queueAuto?"Auto each file":"Same settings"));
+        queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\nInput "+human(in)+" • Est. "+human((long)(out*.90))+"–"+human((long)(out*1.10))+" • "+(queueAuto?"Auto each file":"Same settings")+
+                "\nPicture height is always 184–216px; final size is chosen after scanning each video.");
     }
 
     private void style(){

@@ -6,7 +6,7 @@
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:orientation="vertical">
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="ClipAMV" android:textColor="@color/text" android:textSize="25sp" android:textStyle="bold" />
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Any video. Player-ready." android:textColor="@color/green" android:textSize="13sp" />
-                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="v0.7.0 • FINAL" android:textSize="10sp" android:textColor="@color/muted" android:layout_marginTop="3dp" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="v0.7.1 • PICTURE HEIGHT FIX" android:textSize="10sp" android:textColor="@color/muted" android:layout_marginTop="3dp" />
             </LinearLayout>
             <TextView android:id="@+id/stateBadge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/card_green" android:padding="8dp" android:text="READY" android:textColor="@color/green" android:textStyle="bold" />
         </LinearLayout>
@@ -71,7 +71,7 @@
                 <Button android:id="@+id/subsLargeButton" android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:text="LARGE TEXT" android:background="@drawable/button_selector" android:textColor="@color/text" android:textAllCaps="false" />
             </LinearLayout>
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Off excludes selectable tracks (and keeps picture clean); Forced uses flagged text tracks; First Text prefers an English text track (otherwise first available). Embedded-on-picture subtitles cannot be removed. Bitmap subtitles are not supported for burn-in." android:textColor="@color/muted" android:textSize="11sp" />
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="FRAMING • CALIBRATED" android:textColor="@color/muted" android:textSize="11sp" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="FRAMING • AUTO 184–216px GUARANTEED (ADVANCED OVERRIDES ALSO LIMITED)" android:textColor="@color/muted" android:textSize="11sp" />
             <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
                 <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
                     <Button android:id="@+id/autoFrameButton" android:layout_width="90dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="AUTO" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" />
@@ -100,7 +100,7 @@
             </LinearLayout>
         </LinearLayout>
         <LinearLayout android:id="@+id/customizeOutputPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone"><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:orientation="vertical" android:padding="12dp">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:text="FRAME HEIGHT" android:textColor="@color/muted" android:textSize="11sp" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:text="PICTURE HEIGHT • 184–216px ONLY" android:textColor="@color/muted" android:textSize="11sp" />
             <HorizontalScrollView android:id="@+id/frameScroller" android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
                 <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
                     <Button android:id="@+id/h216" android:layout_width="70dp" android:layout_height="wrap_content" android:background="@drawable/button_selector" android:text="216" android:textColor="@color/text" android:minHeight="50dp" android:textAllCaps="false" android:textSize="13sp" android:layout_margin="2dp" android:includeFontPadding="false" />
