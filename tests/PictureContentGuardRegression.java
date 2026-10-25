@@ -39,8 +39,32 @@ public final class PictureContentGuardRegression {
         yes(PictureContentGuard.evaluate(new PresetEngine.Crop[]{measured,measured,
                 new PresetEngine.Crop(256,216,64,12)})==
                 PictureContentGuard.UNKNOWN,"variable format must not be cropped");
+        // v0.7.4: probe outages and black/fade frames cannot prevent conversion.
+        // Only repeatable undersize with no valid full-height contradictory
+        // scene should trigger source-crop advice.
+        yes(PictureContentGuard.consensusUndersized(new PresetEngine.Crop[]{
+                null,measured,null,measured,null,null})!=null,
+                "two stable samples amid dark frames must suggest correction");
+        yes(PictureContentGuard.consensusUndersized(new PresetEngine.Crop[]{
+                null,measured,null,null,null,null})==null,
+                "one possibly dark sample cannot force crop");
+        yes(PictureContentGuard.consensusUndersized(new PresetEngine.Crop[]{
+                null,measured,null,new PresetEngine.Crop(256,216,64,12),measured,null})==null,
+                "variable scene ratio cannot force crop");
+        yes(PictureContentGuard.consensusUndersized(new PresetEngine.Crop[]{
+                new PresetEngine.Crop(256,164,64,38),
+                new PresetEngine.Crop(256,162,64,38),null})!=null,
+                "nearby valid black-border measures should cluster");
+        java.util.List<PresetEngine.Crop> jitter=new java.util.ArrayList<>();
+        for(int j=0;j<32;j++)jitter.add(new PresetEngine.Crop(256,j%2==0?162:164,64,38));
+        yes(PictureContentGuard.clusterFrameCrops(jitter)!=null,
+                "162/164 frame jitter should be grouped, not reject source");
+        java.util.List<PresetEngine.Crop> inconsistent=new java.util.ArrayList<>();
+        for(int j=0;j<32;j++)inconsistent.add(new PresetEngine.Crop(256,j%2==0?164:216,64,j%2==0?38:12));
+        yes(PictureContentGuard.clusterFrameCrops(inconsistent)!=null,
+                "a single scene can have a dominant group; cross-scene check remains required");
         s.rotation=90;
         yes(PictureContentGuard.sourceCrop(s,p,measured)==null,"skip rotated geometry");
-        System.out.println("PASS: 12 height guard cases including fail-closed probe validation and 164px repair");
+        System.out.println("PASS: legacy probe regression and nonblocking v0.7.4 border consensus");
     }
 }

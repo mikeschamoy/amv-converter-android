@@ -2,7 +2,7 @@ package com.mikeschamoy.amvconverter;
 import java.util.Locale;
 
 public final class PresetEngine {
-    public static final String PRESET_VERSION="4.3";
+    public static final String PRESET_VERSION="4.4";
     // Hard limit for the actual image region inside the 320x240 AMV canvas.
     // This takes precedence over Auto/Fit/Fill/Balanced and height overrides.
     public static final int MIN_PICTURE_HEIGHT=184;
@@ -95,6 +95,14 @@ public final class PresetEngine {
             else if(ratio<=2.15)h=192;
             else h=184;
         }
+        // A normal 16:9 Movie/Show in Auto mode ALWAYS uses the familiar
+        // 256x216 Gen2 picture. Do not let an optional letterbox crop turn
+        // this into BALANCED/184, or make queue processing differ from single-file.
+        // Respect explicit manual height / framing choices instead.
+        boolean fixedMovie216=type==Type.MOVIE_SHOW && !portrait && !fourThree
+                && framing==FrameMode.AUTO && heightOverride<=0
+                && s.ratio()>=1.70 && s.ratio()<=1.86;
+        if(fixedMovie216)h=216;
         h=Math.max(MIN_PICTURE_HEIGHT,Math.min(MAX_PICTURE_HEIGHT,h));if(h%2!=0)h--;
         p.requestedHeight=h;
         // Resolve framing per source, independently of picture processing and queue mode.
@@ -106,7 +114,7 @@ public final class PresetEngine {
         }
         if(portrait&&portraitMode==PortraitMode.ROTATE)ratio=1.0/ratio;
         if(!Double.isFinite(ratio)||ratio<=0)ratio=16.0/9.0;
-        FrameMode chosen=resolveFraming(type,framing,ratio);
+        FrameMode chosen=fixedMovie216?FrameMode.FILL:resolveFraming(type,framing,ratio);
         // The two 4:3 controls must do what their labels say: FULL fills
         // the selected height; PRESERVE shows the complete uncropped frame.
         if(fourThree&&framing==FrameMode.AUTO)

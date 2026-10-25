@@ -59,11 +59,20 @@ public final class PresetEngineRegression {
                 PresetEngine.Mode.STANDARD,0,0,false,PresetEngine.PortraitMode.FIT,
                 new PresetEngine.Crop(1920,832,0,124),PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
         check(crystalBeforeScan.pictureHeight==216,"pre-scan full-screen estimate changed");
-        check(crystalAfterScan.pictureHeight==184,"Crystal Lake 164px regression returned: "+crystalAfterScan.pictureHeight);
-        check(crystalAfterScan.filter.contains("crop=256:184:"),
+        check(crystalAfterScan.pictureHeight==216,"Crystal Lake Auto must remain fixed 216px after letterbox detection: "+crystalAfterScan.pictureHeight);
+        check(crystalAfterScan.filter.contains("crop=256:216:"),
                 "encoded crop must use actual 184px target");
         check(crystalAfterScan.filter.contains("crop=1920:832:0:124"),
                 "detected source letterbox crop must be retained");
+        // Auto 16:9 movies must not inherit detected-crop cinema BALANCED or
+        // shrink the frame. The same engine serves individual files and queues.
+        check(crystalAfterScan.frameMode==PresetEngine.FrameMode.FILL,"16:9 movie must fill 216");
+        check(crystalAfterScan.pictureWidth==256,"16:9 movie must fill Gen2 viewport");
+        PresetEngine.Preset movie192=PresetEngine.choose(crystal,PresetEngine.Type.MOVIE_SHOW,
+                PresetEngine.Mode.STANDARD,192,25,false,PresetEngine.PortraitMode.FIT,
+                new PresetEngine.Crop(1920,832,0,124),PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
+        check(movie192.pictureHeight>=184&&movie192.pictureHeight<=216,"manual 192 outside allowed bounds");
+        check(movie192.requestedHeight==192,"manual height override ignored");
         // Even older explicit overrides outside the range are clamped.
         PresetEngine.Preset low=PresetEngine.choose(crystal,PresetEngine.Type.MOVIE_SHOW,
                 PresetEngine.Mode.STANDARD,144,25,false,PresetEngine.PortraitMode.FIT,null,

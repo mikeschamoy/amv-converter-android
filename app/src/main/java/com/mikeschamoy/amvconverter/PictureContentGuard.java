@@ -45,6 +45,50 @@ public final class PictureContentGuard {
         return REPAIR;
     }
 
+    /** Combine cropdetect's frame-to-frame 2px rounding fluctuations.
+     * Older code demanded 60% EXACT string equality, rejecting valid scenes
+     * whose nonblack bounds alternate between e.g. 162 and 164 pixels.
+     */
+    public static PresetEngine.Crop clusterFrameCrops(java.util.List<PresetEngine.Crop> frames){
+        if(frames==null || frames.size()<6)return null;
+        int most=0;PresetEngine.Crop best=null;
+        for(PresetEngine.Crop candidate:frames){
+            if(candidate==null || candidate.x<0 || candidate.y<0 ||
+                    candidate.w<=0 || candidate.h<=0 || candidate.x+candidate.w>320 ||
+                    candidate.y+candidate.h>240)continue;
+            int count=0;
+            for(PresetEngine.Crop f:frames){
+                if(f!=null && Math.abs(f.w-candidate.w)<=4 &&
+                        Math.abs(f.h-candidate.h)<=4 && Math.abs(f.x-candidate.x)<=4 &&
+                        Math.abs(f.y-candidate.y)<=4)count++;
+            }
+            if(count>most){most=count;best=candidate;}
+        }
+        if(most<Math.max(6,(int)Math.ceil(frames.size()*0.50)))return null;
+        return best;
+    }
+
+    /** Stable undersized picture borders across independent source positions.
+     * Invalid/dark frames do not count as either evidence for or against crop.
+     * A measured near-full picture at another position blocks speculative crop.
+     */
+    public static PresetEngine.Crop consensusUndersized(PresetEngine.Crop[] samples){
+        if(samples==null || samples.length<2)return null;
+        for(PresetEngine.Crop candidate:samples){
+            if(!undersized(candidate) || candidate.w<248 || candidate.x<62 || candidate.x>66)
+                continue;
+            int supports=0;boolean contradictory=false;
+            for(PresetEngine.Crop other:samples){
+                if(other==null || other.w<=0 || other.h<=0 || other.x<0 || other.y<0
+                        || other.x+other.w>320 || other.y+other.h>240)continue;
+                if(consistent(candidate,other))supports++;
+                else if(other.w>=248 && other.h>=184)contradictory=true;
+            }
+            if(supports>=2 && !contradictory)return candidate;
+        }
+        return null;
+    }
+
     public static boolean consistent(PresetEngine.Crop a, PresetEngine.Crop b) {
         return a != null && b != null && a.w >= 248 && b.w >= 248
                 && Math.abs(a.x-b.x) <= 4 && Math.abs(a.y-b.y) <= 4

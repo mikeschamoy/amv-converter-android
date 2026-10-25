@@ -136,15 +136,15 @@ public class MainActivity extends Activity {
     // Display the exact resolved encode size, never the permitted height range.
     private void showEncodingPicture(int width,int height,String name){
         String shortName=(name==null||name.isEmpty())?"Current video":name;
-        String detail="Actual picture: "+width+"×"+height+" • "+height+"px high";
+        String detail="Encoded frame: "+width+"×"+height+" • "+height+"px high";
         autoSummaryText.setText("ENCODING • "+shortName+"\n"+detail);
         if(queuePanel.getVisibility()==View.VISIBLE)
             queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\n"+shortName+"\n"+detail);
     }
     private void showPictureScanning(){
-        autoSummaryText.setText("SCANNING VIDEO\nChecking picture framing before conversion…");
+        autoSummaryText.setText("SCANNING VIDEO\nChecking for source black borders…");
         if(queuePanel.getVisibility()==View.VISIBLE)
-            queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\nScanning current video for exact picture size…");
+            queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\nChecking source borders…");
     }
     private void showLastPicture(){
         String report=getSharedPreferences("state",MODE_PRIVATE).getString("lastResult","");
@@ -1033,7 +1033,7 @@ public class MainActivity extends Activity {
     private void resetDefaults(){typeAuto=true;type=PresetEngine.Type.YOUTUBE;mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;frameMode=PresetEngine.FrameMode.AUTO;pictureMode=PresetEngine.PictureMode.AUTO;subtitleMode=SubtitleSupport.OFF;subtitleSize=SubtitleSupport.LARGE;autoBarsCheck.setChecked(true);getSharedPreferences("state",MODE_PRIVATE).edit().putInt("picture",0).apply();queueAuto=true;setPerformance(0);refresh();}
 
     private String sourceBlock(PresetEngine.SourceInfo s){return "SOURCE\n"+s.width+"×"+s.height+"\n"+String.format(Locale.US,"%.3f fps",s.fps)+"\n"+String.format(Locale.US,"%.2f:1",s.ratio())+"\n"+(s.image?"IMAGE":fmtTime(s.durationSeconds))+"\nInput: "+human(s.inputBytes);}
-    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.7.3\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+effectiveType(source,inputUri)+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\nSubtitles: "+subtitleMode+" size "+subtitleSize+"\nAuto bars: "+autoBarsCheck.isChecked()+
+    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.7.4\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+effectiveType(source,inputUri)+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\nSubtitles: "+subtitleMode+" size "+subtitleSize+"\nAuto bars: "+autoBarsCheck.isChecked()+
         "\nNative last encode: "+String.format(Locale.US,"%.2fx",getSharedPreferences("state",MODE_PRIVATE).getFloat("lastEncodeSpeed",0))+
         " ("+getSharedPreferences("state",MODE_PRIVATE).getLong("lastEncodeWallMs",0)+" ms encoder only)"+
         "\nLast encoded filter: "+getSharedPreferences("state",MODE_PRIVATE).getString("lastEncodeFilter","-")+

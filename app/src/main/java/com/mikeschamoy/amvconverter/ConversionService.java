@@ -184,24 +184,23 @@ public class ConversionService extends Service {
                 processing=result.mode;
             }
             PresetEngine.Preset preset=PresetEngine.choose(info,itemType,mode,itemHeight,itemFps,preserve43,portrait,crop,frame,processing);
-            // The 184..216 mathematical clamp does not remove bars already
-            // painted inside the source. Check actual filtered frames BEFORE
-            // spending an hour encoding or publishing another undersized AMV.
-            if(!info.image){
-                PresetEngine.Preset safe=verifyVisiblePicture(in,info,itemType,mode,itemHeight,itemFps,
+            // The 320x240 output geometry is deterministic. Scene brightness,
+            // fade-to-black, or an unavailable cropdetect log must never veto a
+            // valid conversion. For ordinary 16:9 Movie/Show Auto, source-level
+            // border removal is an optional improvement based on consistent
+            // evidence, NOT a requirement for exporting an AMV.
+            if(!info.image && itemType==PresetEngine.Type.MOVIE_SHOW
+                    && frame==PresetEngine.FrameMode.AUTO && itemHeight<=0
+                    && info.ratio()>=1.70 && info.ratio()<=1.86
+                    && !(total==1 && intent.hasExtra("manualCropW"))){
+                preset=repairStableLetterboxIfFound(in,info,itemType,mode,itemHeight,itemFps,
                     preserve43,portrait,crop,frame,processing,preset,start,end,test);
-                if(safe==null){
-                    fail++;
-                    addHistory("✕ "+original+" — actual picture-height guard failed");
-                    continue;
-                }
-                preset=safe;
             }
 
             String outName=FileNameCleaner.clean(original,itemType,info.image);
             setActivePicture(preset,outName.replaceFirst("(?i)\\.(amv|jpg)$",""));
-            update(i,total,0,0,0,"Actual picture: "+preset.pictureWidth+"×"+preset.pictureHeight+
-                " ("+preset.pictureHeight+"px high) • "+outName,false);
+            update(i,total,0,0,0,"Encoded frame: "+preset.pictureWidth+"×"+preset.pictureHeight+
+                " (encoded frame) • "+outName,false);
             // Never expose an empty AMV in Downloads while it is still encoding.
             // ACTION_CREATE_DOCUMENT has already created a destination; don't delete it on failure.
             final boolean chosenDocument=total==1&&singleOut!=null;
@@ -539,61 +538,56 @@ public class ConversionService extends Service {
     }
 
     /**
-     * Observe the actual filtered 320x240 picture, not just preset dimensions.
-     * A 216px filter can still show only 164px when the source has baked-in
-     * black bars. Repair a stable crop at full source resolution when safe.
-     * If a clearly undersized picture cannot be repaired, fail before encode.
+     * Optional, nonblocking source-border correction for standard 16:9 movie
+     * output. We never reject a conversion because scenes are dark or source
+     * aspect ratios change. Two independent matching samples must demonstrate
+     * stable borders before adjusting the source crop. The output preset itself
+     * always remains 256x216 for 16:9 Movie/Show Auto.
      */
-    private PresetEngine.Preset verifyVisiblePicture(Uri uri, PresetEngine.SourceInfo info,
+    private PresetEngine.Preset repairStableLetterboxIfFound(Uri uri, PresetEngine.SourceInfo info,
             PresetEngine.Type type, PresetEngine.Mode mode,int height,int fps,
             boolean preserve43, PresetEngine.PortraitMode portrait, PresetEngine.Crop crop,
             PresetEngine.FrameMode frame, PresetEngine.PictureMode processing,
             PresetEngine.Preset preset,double start,double end,boolean test){
+        if(cancelRequested || preset.pictureHeight!=216 || preset.pictureWidth!=256)
+            return preset;
         double begin=Math.max(0,start);
         double available=info.durationSeconds>0?Math.max(0,info.durationSeconds-begin):0;
-        double span=test?(available>0?Math.min(30,available):30):
-                 (end>begin&&end>0?end-begin:available);
-        // Three independent portions of this file reduce the chance that a
-        // dark/letterboxed opening frame masquerades as the entire movie.
-        // The guard must NEVER treat failed probes as verified picture height.
-        double[] positions={0.18,0.48,0.78};
+        // Even the 10-second preview samples the source's whole timeline;
+        // otherwise it can choose different borders from a full conversion.
+        double span=(end>begin&&end>0?end-begin:available);
+        if(span<3)return preset;
+        // More independent positions than v0.7.3; dark scenes are skipped.
+        double[] positions={0.10,0.24,0.38,0.52,0.66,0.82};
         PresetEngine.Crop[] samples=new PresetEngine.Crop[positions.length];
-        for(int n=0;n<positions.length;n++)
-            samples[n]=detectRenderedSample(uri,preset,begin+Math.max(0,span)*positions[n]);
-        int verdict=PictureContentGuard.evaluate(samples);
-        if(verdict==PictureContentGuard.ACCEPT)return preset;
-        if(verdict!=PictureContentGuard.REPAIR){
-            lastFailureReason="Could not verify a consistent visible picture of at least 184px " +
-                "at multiple points in this video. No AMV was created; " +
-                "try another source or a manual crop.";
-            recordFailure(lastFailureReason);
-            return null;
-        }
-        PresetEngine.Crop anchor=null;
-        for(PresetEngine.Crop c:samples)if(PictureContentGuard.undersized(c)){
-            anchor=c;break;
+        for(int n=0;n<positions.length && !cancelRequested;n++)
+            samples[n]=detectRenderedSample(uri,preset,begin+span*positions[n]);
+        if(cancelRequested)return preset;
+        PresetEngine.Crop anchor=PictureContentGuard.consensusUndersized(samples);
+        if(anchor==null){
+            android.util.Log.i("ClipAMV","No stable source letterboxing verified; encoding fixed 256x216 frame");
+            return preset;
         }
         PresetEngine.Crop fixed=PictureContentGuard.sourceCrop(info,preset,anchor);
-        if(fixed==null){
-            lastFailureReason="Visible picture is only "+anchor.h+
-                "px tall; automatic black-bar correction cannot safely restore it.";
-            recordFailure(lastFailureReason);
-            return null;
-        }
+        if(fixed==null)return preset;
         PresetEngine.Preset adjusted=PresetEngine.choose(info,type,mode,height,fps,
                 preserve43,portrait,fixed,frame,processing);
-        PresetEngine.Crop[] after=new PresetEngine.Crop[positions.length];
-        for(int n=0;n<positions.length;n++)
-            after[n]=detectRenderedSample(uri,adjusted,begin+Math.max(0,span)*positions[n]);
-        if(PictureContentGuard.evaluate(after)!=PictureContentGuard.ACCEPT){
-            lastFailureReason="Black-bar correction could not verify the 184px minimum " +
-                "at multiple points. No undersized video was saved.";
-            recordFailure(lastFailureReason);
-            return null;
+        if(adjusted.pictureWidth!=256 || adjusted.pictureHeight!=216)return preset;
+        // Validate at the exact sample positions that yielded the consensus.
+        // Other positions may contain fades, credits or variable-aspect scenes.
+        int passes=0;
+        for(int n=0;n<samples.length && !cancelRequested;n++){
+            if(!PictureContentGuard.consistent(anchor,samples[n]))continue;
+            PresetEngine.Crop c=detectRenderedSample(uri,adjusted,begin+span*positions[n]);
+            if(c!=null && c.w>=248 && c.h>=184)passes++;
+            if(passes>=2)break;
         }
-        android.util.Log.i("ClipAMV","Visible picture repaired "+anchor.w+"x"+anchor.h+
-                " to "+adjusted.pictureWidth+"x"+adjusted.pictureHeight+
-                " (confirmed in rendered samples) using "+fixed);
+        if(passes<2){
+            android.util.Log.w("ClipAMV","Border adjustment not confirmed; using original fixed 256x216 frame");
+            return preset;
+        }
+        android.util.Log.i("ClipAMV","Stable source bars removed: "+fixed+
+                "; encoded picture 256x216; valid corrected samples="+passes);
         return adjusted;
     }
 
@@ -607,23 +601,16 @@ public class ConversionService extends Service {
             String logs=session.getAllLogsAsString();
             if(logs==null)return null;
             Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(logs);
-            LinkedHashMap<String,Integer> votes=new LinkedHashMap<>();
-            int total=0;
+            java.util.ArrayList<PresetEngine.Crop> frames=new java.util.ArrayList<>();
             while(m.find()){
                 int w=Integer.parseInt(m.group(1)),h=Integer.parseInt(m.group(2));
                 int x=Integer.parseInt(m.group(3)),y=Integer.parseInt(m.group(4));
                 if(w<=0||h<=0||x<0||y<0||x+w>320||y+h>240)continue;
-                String key=w+":"+h+":"+x+":"+y;
-                votes.put(key,votes.getOrDefault(key,0)+1);total++;
+                frames.add(new PresetEngine.Crop(w,h,x,y));
             }
-            String best=null;int most=0;
-            for(Map.Entry<String,Integer> v:votes.entrySet())if(v.getValue()>most){
-                best=v.getKey();most=v.getValue();
-            }
-            if(best==null||most<Math.max(5,(int)Math.ceil(total*0.60)))return null;
-            String[] c=best.split(":");
-            return new PresetEngine.Crop(Integer.parseInt(c[0]),Integer.parseInt(c[1]),
-                    Integer.parseInt(c[2]),Integer.parseInt(c[3]));
+            // Group ±4px detector jitter instead of requiring every frame to
+            // report a byte-for-byte identical rectangle.
+            return PictureContentGuard.clusterFrameCrops(frames);
         }catch(Exception error){
             android.util.Log.w("ClipAMV","Visible-picture probe unavailable",error);
             return null;
