@@ -74,19 +74,33 @@ public final class PictureContentGuard {
      */
     public static PresetEngine.Crop consensusUndersized(PresetEngine.Crop[] samples){
         if(samples==null || samples.length<2)return null;
-        for(PresetEngine.Crop candidate:samples){
-            if(!undersized(candidate) || candidate.w<248 || candidate.x<62 || candidate.x>66)
-                continue;
-            int supports=0;boolean contradictory=false;
-            for(PresetEngine.Crop other:samples){
-                if(other==null || other.w<=0 || other.h<=0 || other.x<0 || other.y<0
-                        || other.x+other.w>320 || other.y+other.h>240)continue;
-                if(consistent(candidate,other))supports++;
-                else if(other.w>=248 && other.h>=184)contradictory=true;
-            }
-            if(supports>=2 && !contradictory)return candidate;
+        PresetEngine.Crop best=null;
+        int bestVotes=0, good=0, clearlyFull=0;
+        for(PresetEngine.Crop c:samples){
+            if(!validCanvasCrop(c))continue;
+            good++;
+            if(c.w>=248 && c.h>=208 && c.x>=62 && c.x<=66)clearlyFull++;
         }
-        return null;
+        for(PresetEngine.Crop candidate:samples){
+            if(!undersized(candidate) || candidate.h<136 || candidate.w<248 ||
+                    candidate.x<62 || candidate.x>66)continue;
+            int votes=0;
+            for(PresetEngine.Crop other:samples){
+                if(validCanvasCrop(other) && consistent(candidate,other))votes++;
+            }
+            if(votes>bestVotes){bestVotes=votes;best=candidate;}
+        }
+        // An isolated dark or partial-frame reading is not sufficient.
+        // Require at least two independently agreeing positions, a majority of
+        // measurable positions, and strong protection against mixed-aspect video.
+        if(bestVotes<2 || bestVotes*2<good || clearlyFull>=2 ||
+                (clearlyFull==1 && bestVotes<3))return null;
+        return best;
+    }
+
+    private static boolean validCanvasCrop(PresetEngine.Crop c){
+        return c!=null && c.w>0 && c.h>0 && c.x>=0 && c.y>=0 &&
+                c.x+c.w<=320 && c.y+c.h<=240;
     }
 
     public static boolean consistent(PresetEngine.Crop a, PresetEngine.Crop b) {

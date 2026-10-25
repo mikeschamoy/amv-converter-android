@@ -53,7 +53,8 @@ public class MainActivity extends Activity {
     private double displayedPreviewSeconds=0;
     private String previewDiagnostic="No preview attempt recorded";
     private PresetEngine.Crop crop;
-    private String latestDiagnostics="ClipAMV v0.6.4\nNo source selected yet.";
+    private volatile PresetEngine.Preset lastResolvedPreviewPreset;
+    private String latestDiagnostics="ClipAMV v0.7.6\nNo source selected yet.";
     private long sourceGeneration=0,queueGeneration=0;
     private double proxyBaseSeconds=0,pendingPreviewSeek=-1;
 
@@ -636,7 +637,7 @@ public class MainActivity extends Activity {
     private void resetPreviewState(){
         ++previewJobVersion;handler.removeCallbacks(previewRebuild);
         if(activePreviewSessionId>0){FFmpegKit.cancel(activePreviewSessionId);activePreviewSessionId=-1;}
-        usingProxy=false; generatingProxy=false; proxyBaseSeconds=0; requestedPreviewSeconds=-1;
+        usingProxy=false; generatingProxy=false; lastResolvedPreviewPreset=null; proxyBaseSeconds=0; requestedPreviewSeconds=-1;
         pendingPreviewSeek=-1;pendingSourceSeekSeconds=-1;previewAutoplayWhenReady=false;
         displayedPreviewSeconds=0;preview.clearSource();
         findViewById(R.id.previewHint).setVisibility(View.VISIBLE); fallback.setImageDrawable(null); fallback.setVisibility(View.GONE); preview.setVisibility(View.VISIBLE);
@@ -662,13 +663,28 @@ public class MainActivity extends Activity {
         generatingProxy=true;
         String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri);
         double ss=requestedPreviewSeconds>=0?requestedPreviewSeconds:0;
-        PresetEngine.Preset selected=preset();
+        final PresetEngine.SourceInfo selectedInfo=source;
+        final PresetEngine.Type selectedType=effectiveType(source,inputUri);
+        final PresetEngine.Mode selectedMode=mode;
+        final int selectedHeight=heightOverride,selectedFps=fpsOverride;
+        final boolean selected43=preserve43,selectedBars=autoBarsCheck.isChecked();
+        final PresetEngine.PortraitMode selectedPortrait=portraitMode;
+        final PresetEngine.Crop selectedManualCrop=crop;
+        final PresetEngine.FrameMode selectedFraming=frameMode;
+        final PresetEngine.PictureMode selectedProcessing=effectivePicture();
+        final double selectedStart=parseTime(startTrim.getText().toString());
+        final double selectedEnd=parseTime(endTrim.getText().toString());
         File out=new File(getCacheDir(),"clipamv_proxy_"+gen+"_"+job+".mp4");
-        stateBadge.setText("PREVIEW");statusText.setText("Rendering exact 320×240 framing preview…");
-        // The preview goes through EXACTLY the same -vf chain as the AMV output.
+        stateBadge.setText("PREVIEW");statusText.setText("Scanning framing, then rendering 320×240 preview…");
         final int subChoice=subtitleMode,subFont=subtitleSize;
         final Uri selectedSource=inputUri;
         new Thread(()->{
+        final PresetEngine.Preset selected=FramePlanResolver.resolve(selectedInfo,selectedType,
+                selectedMode,selectedHeight,selectedFps,selected43,selectedPortrait,
+                selectedManualCrop,selectedFraming,selectedProcessing,selectedBars,
+                selectedStart,selectedEnd,new FramePlanProbeAndroid(this,selectedSource,selectedInfo,
+                ()->job!=previewJobVersion||gen!=sourceGeneration));
+        if(job!=previewJobVersion||gen!=sourceGeneration)return;
         File subtitles=null;
         String filter=selected.filter;
         try{
@@ -698,12 +714,14 @@ public class MainActivity extends Activity {
             generatingProxy=false;stateBadge.setText("READY");activePreviewSessionId=-1;
             if(ReturnCode.isSuccess(session.getReturnCode())&&out.isFile()&&out.length()>0){
                 usingProxy=true;proxyBaseSeconds=ss;
+                lastResolvedPreviewPreset=selected;
                 previewAutoplayWhenReady=false;
                 preview.setEncodedPreview(true);
                 fallback.setVisibility(View.GONE);preview.setVisibility(View.VISIBLE);
                 preview.setVideo(Uri.fromFile(out));
                 preview.setPreset(selected,playerView);
-                statusText.setText("Exact filtered preview • Player View simulates calibrated Gen 2 viewport.");
+                statusText.setText("Filtered preview • "+selected.frameAnalysis+
+                    " • Player View simulates Gen 2.");
             }else{
                 String detail=session.getAllLogsAsString();
                 recordPreviewProblem("FFmpeg preview render",lastErrorLine(detail,
@@ -718,7 +736,8 @@ public class MainActivity extends Activity {
     private void extractFrameAt(double sec){
         if(conversionActive||inputUri==null||source==null)return;
         final long gen=sourceGeneration,job=previewJobVersion; String saf=FFmpegKitConfig.getSafParameterForRead(this,inputUri); File out=new File(getCacheDir(),"clipamv_frame_"+gen+"_"+job+".jpg");
-        String cmd="-y "+(!source.image?"-ss "+f3(sec)+" ":"")+"-i "+q(saf)+" -frames:v 1 -vf "+q(preset().filter)+" -q:v 2 "+q(out.getAbsolutePath());
+        PresetEngine.Preset fallbackPreset=lastResolvedPreviewPreset!=null?lastResolvedPreviewPreset:preset();
+        String cmd="-y "+(!source.image?"-ss "+f3(sec)+" ":"")+"-i "+q(saf)+" -frames:v 1 -vf "+q(fallbackPreset.filter)+" -q:v 2 "+q(out.getAbsolutePath());
         FFmpegKit.executeAsync(cmd,session->runOnUiThread(()->{
             if(gen!=sourceGeneration||job!=previewJobVersion)return; Bitmap b=BitmapFactory.decodeFile(out.getAbsolutePath());
             if(b!=null){fallback.setImageBitmap(playerView?playerBitmap(b):b);fallback.setVisibility(View.VISIBLE);preview.setVisibility(View.GONE);statusText.setText("Exact filtered frame loaded • ▶ plays source");}
@@ -786,12 +805,19 @@ public class MainActivity extends Activity {
         final PresetEngine.FrameMode frame=frameMode;
         pictureCompareButton.setEnabled(false);
         statusText.setText("Rendering Sharp and Smooth from the same frame…");
+        final boolean compareAutoBars=autoBarsCheck.isChecked();
+        final double compareStart=parseTime(startTrim.getText().toString());
+        final double compareEnd=parseTime(endTrim.getText().toString());
         new Thread(()->{
             Bitmap[] images=new Bitmap[2];
+            PresetEngine.Preset calibrated=FramePlanResolver.resolve(info,t,m,hh,ff,p43,portrait,
+                    c,frame,PresetEngine.PictureMode.SHARP,compareAutoBars,compareStart,compareEnd,
+                    new FramePlanProbeAndroid(this,uri,info,()->gen!=sourceGeneration));
             for(int i=0;i<2;i++){
                 String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
                 PresetEngine.PictureMode pm=i==0?PresetEngine.PictureMode.SHARP:PresetEngine.PictureMode.SMOOTH;
-                PresetEngine.Preset selected=PresetEngine.choose(info,t,m,hh,ff,p43,portrait,c,frame,pm);
+                PresetEngine.Preset selected=PresetEngine.choose(info,t,m,hh,ff,p43,portrait,
+                    calibrated.detectedCrop,frame,pm);
                 File out=new File(getCacheDir(),"clipamv_compare_"+gen+"_"+i+".png");
                 String cmd="-y "+(!info.image?"-ss "+f3(pos)+" ":"")+"-i "+q(saf)+
                     " -frames:v 1 -vf "+q(selected.filter)+" -an "+q(out.getAbsolutePath());
@@ -843,6 +869,7 @@ public class MainActivity extends Activity {
 
     private void refreshPreview(){
         if(source==null||conversionActive)return;
+        lastResolvedPreviewPreset=null;
         preview.setPreset(preset(),playerView);
         // No automatic 10-second re-encode every time the user changes a setting.
         // Play stays responsive; Refresh explicitly renders the exact AMV framing.
@@ -1033,7 +1060,7 @@ public class MainActivity extends Activity {
     private void resetDefaults(){typeAuto=true;type=PresetEngine.Type.YOUTUBE;mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;frameMode=PresetEngine.FrameMode.AUTO;pictureMode=PresetEngine.PictureMode.AUTO;subtitleMode=SubtitleSupport.OFF;subtitleSize=SubtitleSupport.LARGE;autoBarsCheck.setChecked(true);getSharedPreferences("state",MODE_PRIVATE).edit().putInt("picture",0).apply();queueAuto=true;setPerformance(0);refresh();}
 
     private String sourceBlock(PresetEngine.SourceInfo s){return "SOURCE\n"+s.width+"×"+s.height+"\n"+String.format(Locale.US,"%.3f fps",s.fps)+"\n"+String.format(Locale.US,"%.2f:1",s.ratio())+"\n"+(s.image?"IMAGE":fmtTime(s.durationSeconds))+"\nInput: "+human(s.inputBytes);}
-    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.7.4\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+effectiveType(source,inputUri)+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\nSubtitles: "+subtitleMode+" size "+subtitleSize+"\nAuto bars: "+autoBarsCheck.isChecked()+
+    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.7.6\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+effectiveType(source,inputUri)+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\nSubtitles: "+subtitleMode+" size "+subtitleSize+"\nAuto bars: "+autoBarsCheck.isChecked()+
         "\nNative last encode: "+String.format(Locale.US,"%.2fx",getSharedPreferences("state",MODE_PRIVATE).getFloat("lastEncodeSpeed",0))+
         " ("+getSharedPreferences("state",MODE_PRIVATE).getLong("lastEncodeWallMs",0)+" ms encoder only)"+
         "\nLast encoded filter: "+getSharedPreferences("state",MODE_PRIVATE).getString("lastEncodeFilter","-")+

@@ -158,7 +158,7 @@ public class ConversionService extends Service {
         int subtitleSize=Math.max(0,Math.min(1,intent.getIntExtra(EXTRA_SUBTITLE_SIZE,SubtitleSupport.LARGE)));
 
         int total=inputs.size(),fail=0,completed=0,processed=0,imagesCompleted=0;
-        String lastName="",lastSavedPicture=""; int lastSavedHeight=0; long lastBytes=0,totalBytes=0;
+        String lastName="",lastSavedPicture="",lastSavedProof=""; int lastSavedHeight=0; long lastBytes=0,totalBytes=0;
         for(int i=0;i<total&&QueuePausePolicy.shouldStart(i,cancelRequested,pauseRequested);i++){
             processed=i+1;
             lastFailureReason="";
@@ -171,36 +171,28 @@ public class ConversionService extends Service {
             if(info==null){fail++;lastFailureReason="Could not inspect "+original;
                 recordFailure(lastFailureReason);addHistory("✕ "+original+" — inspect failed");continue;}
 
-            PresetEngine.Crop crop=autoBars&&!info.image?detectBars(in,info):null;
-            if(total==1&&intent.hasExtra("manualCropW")){crop=new PresetEngine.Crop(
+            PresetEngine.Crop manualCrop=null;
+            if(total==1 && intent.hasExtra("manualCropW")) manualCrop=new PresetEngine.Crop(
                     intent.getIntExtra("manualCropW",0),intent.getIntExtra("manualCropH",0),
-                    intent.getIntExtra("manualCropX",0),intent.getIntExtra("manualCropY",0));}
+                    intent.getIntExtra("manualCropX",0),intent.getIntExtra("manualCropY",0));
             PresetEngine.Type itemType=(queueAuto||autoType)?AutoSelection.choose(info,original):type;
-            int itemHeight=height; // Explicit height is respected even in Auto Each File queues.
-            int itemFps=fps; // Explicit FPS is respected even in Auto Each File queues.
+            int itemHeight=height;
+            int itemFps=fps;
             PresetEngine.PictureMode processing=picture;
             if(picture==PresetEngine.PictureMode.AUTO){
                 PictureAnalysis.Result result=PictureAnalysis.analyze(this,in,info);
                 processing=result.mode;
             }
-            PresetEngine.Preset preset=PresetEngine.choose(info,itemType,mode,itemHeight,itemFps,preserve43,portrait,crop,frame,processing);
-            // The 320x240 output geometry is deterministic. Scene brightness,
-            // fade-to-black, or an unavailable cropdetect log must never veto a
-            // valid conversion. For ordinary 16:9 Movie/Show Auto, source-level
-            // border removal is an optional improvement based on consistent
-            // evidence, NOT a requirement for exporting an AMV.
-            if(!info.image && itemType==PresetEngine.Type.MOVIE_SHOW
-                    && frame==PresetEngine.FrameMode.AUTO && itemHeight<=0
-                    && info.ratio()>=1.70 && info.ratio()<=1.86
-                    && !(total==1 && intent.hasExtra("manualCropW"))){
-                preset=repairStableLetterboxIfFound(in,info,itemType,mode,itemHeight,itemFps,
-                    preserve43,portrait,crop,frame,processing,preset,start,end,test);
-            }
+            // This is the same resolver used by PREVIEW 10S and comparison.
+            // Never claim that the preview is exact if it omits border correction.
+            PresetEngine.Preset preset=FramePlanResolver.resolve(info,itemType,mode,itemHeight,
+                    itemFps,preserve43,portrait,manualCrop,frame,processing,autoBars,
+                    start,end,new FramePlanProbeAndroid(this,in,info,()->cancelRequested));
 
             String outName=FileNameCleaner.clean(original,itemType,info.image);
             setActivePicture(preset,outName.replaceFirst("(?i)\\.(amv|jpg)$",""));
-            update(i,total,0,0,0,"Encoded frame: "+preset.pictureWidth+"×"+preset.pictureHeight+
-                " (encoded frame) • "+outName,false);
+            update(i,total,0,0,0,"Frame: "+preset.pictureWidth+"×"+preset.pictureHeight+
+                " • "+preset.frameAnalysis+" • "+outName,false);
             // Never expose an empty AMV in Downloads while it is still encoding.
             // ACTION_CREATE_DOCUMENT has already created a destination; don't delete it on failure.
             final boolean chosenDocument=total==1&&singleOut!=null;
@@ -262,7 +254,7 @@ public class ConversionService extends Service {
                 long bytes=copyToOutput(stage,out);
                 if(downloads&&!chosenDocument)publishDownload(out);
                 completed++;if(info.image)imagesCompleted++;lastName=displayName(out);lastBytes=bytes;totalBytes+=bytes;
-                lastSavedPicture=preset.pictureWidth+"×"+preset.pictureHeight;lastSavedHeight=preset.pictureHeight;
+                lastSavedPicture=preset.pictureWidth+"×"+preset.pictureHeight;lastSavedHeight=preset.pictureHeight;lastSavedProof=preset.frameAnalysis;
                 addHistory("✓ "+outName+" — "+human(bytes)+
                     " • full structure/seek checks passed");
             }catch(Exception e){
@@ -311,7 +303,8 @@ public class ConversionService extends Service {
             (paused?"\nRemaining: "+(total-processed)+" • Resume from the app":"")+
             "\nElapsed: "+eta(Math.max(0,(SystemClock.elapsedRealtime()-jobStartMs)/1000))+
             (completed>0?"\nLast: "+display+" • "+human(lastBytes)+"\nLast picture: "+lastSavedPicture+
-                " ("+lastSavedHeight+"px high)"+
+                " ("+lastSavedHeight+"px encoded region)"+
+                "\nPicture scan: "+lastSavedProof+
                 "\nTotal: "+human(totalBytes):"")+
             "\nSaved to: "+destination+
             (completed>0?"\nChecks: "+(imagesCompleted==completed?"Image format validated":imagesCompleted>0?"AMV structure/seek and image format validated":"AMV structure and seek verified before publishing"):"")+
@@ -535,123 +528,6 @@ public class ConversionService extends Service {
             s.inputBytes=querySize(uri);
             return s;
         }catch(Exception e){return null;}
-    }
-
-    /**
-     * Optional, nonblocking source-border correction for standard 16:9 movie
-     * output. We never reject a conversion because scenes are dark or source
-     * aspect ratios change. Two independent matching samples must demonstrate
-     * stable borders before adjusting the source crop. The output preset itself
-     * always remains 256x216 for 16:9 Movie/Show Auto.
-     */
-    private PresetEngine.Preset repairStableLetterboxIfFound(Uri uri, PresetEngine.SourceInfo info,
-            PresetEngine.Type type, PresetEngine.Mode mode,int height,int fps,
-            boolean preserve43, PresetEngine.PortraitMode portrait, PresetEngine.Crop crop,
-            PresetEngine.FrameMode frame, PresetEngine.PictureMode processing,
-            PresetEngine.Preset preset,double start,double end,boolean test){
-        if(cancelRequested || preset.pictureHeight!=216 || preset.pictureWidth!=256)
-            return preset;
-        double begin=Math.max(0,start);
-        double available=info.durationSeconds>0?Math.max(0,info.durationSeconds-begin):0;
-        // Even the 10-second preview samples the source's whole timeline;
-        // otherwise it can choose different borders from a full conversion.
-        double span=(end>begin&&end>0?end-begin:available);
-        if(span<3)return preset;
-        // More independent positions than v0.7.3; dark scenes are skipped.
-        double[] positions={0.10,0.24,0.38,0.52,0.66,0.82};
-        PresetEngine.Crop[] samples=new PresetEngine.Crop[positions.length];
-        for(int n=0;n<positions.length && !cancelRequested;n++)
-            samples[n]=detectRenderedSample(uri,preset,begin+span*positions[n]);
-        if(cancelRequested)return preset;
-        PresetEngine.Crop anchor=PictureContentGuard.consensusUndersized(samples);
-        if(anchor==null){
-            android.util.Log.i("ClipAMV","No stable source letterboxing verified; encoding fixed 256x216 frame");
-            return preset;
-        }
-        PresetEngine.Crop fixed=PictureContentGuard.sourceCrop(info,preset,anchor);
-        if(fixed==null)return preset;
-        PresetEngine.Preset adjusted=PresetEngine.choose(info,type,mode,height,fps,
-                preserve43,portrait,fixed,frame,processing);
-        if(adjusted.pictureWidth!=256 || adjusted.pictureHeight!=216)return preset;
-        // Validate at the exact sample positions that yielded the consensus.
-        // Other positions may contain fades, credits or variable-aspect scenes.
-        int passes=0;
-        for(int n=0;n<samples.length && !cancelRequested;n++){
-            if(!PictureContentGuard.consistent(anchor,samples[n]))continue;
-            PresetEngine.Crop c=detectRenderedSample(uri,adjusted,begin+span*positions[n]);
-            if(c!=null && c.w>=248 && c.h>=184)passes++;
-            if(passes>=2)break;
-        }
-        if(passes<2){
-            android.util.Log.w("ClipAMV","Border adjustment not confirmed; using original fixed 256x216 frame");
-            return preset;
-        }
-        android.util.Log.i("ClipAMV","Stable source bars removed: "+fixed+
-                "; encoded picture 256x216; valid corrected samples="+passes);
-        return adjusted;
-    }
-
-    private PresetEngine.Crop detectRenderedSample(Uri uri,PresetEngine.Preset preset,double at){
-        try{
-            String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
-            String vf=preset.filter+",cropdetect=limit=24:round=2:reset=0";
-            FFmpegSession session=FFmpegKit.execute("-hide_banner -ss "+fmt(Math.max(0,at))+" -i "+q(saf)+
-                    " -frames:v 32 -vf "+q(vf)+" -an -f null -");
-            if(!ReturnCode.isSuccess(session.getReturnCode()))return null;
-            String logs=session.getAllLogsAsString();
-            if(logs==null)return null;
-            Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(logs);
-            java.util.ArrayList<PresetEngine.Crop> frames=new java.util.ArrayList<>();
-            while(m.find()){
-                int w=Integer.parseInt(m.group(1)),h=Integer.parseInt(m.group(2));
-                int x=Integer.parseInt(m.group(3)),y=Integer.parseInt(m.group(4));
-                if(w<=0||h<=0||x<0||y<0||x+w>320||y+h>240)continue;
-                frames.add(new PresetEngine.Crop(w,h,x,y));
-            }
-            // Group ±4px detector jitter instead of requiring every frame to
-            // report a byte-for-byte identical rectangle.
-            return PictureContentGuard.clusterFrameCrops(frames);
-        }catch(Exception error){
-            android.util.Log.w("ClipAMV","Visible-picture probe unavailable",error);
-            return null;
-        }
-    }
-
-    private PresetEngine.Crop detectBars(Uri uri,PresetEngine.SourceInfo info){
-        // Take two independent, short samples. Do NOT adopt the last crop from a
-        // dark transient scene: both samples must agree before cropping.
-        PresetEngine.Crop first=detectBarsSample(uri,info,Math.max(0,info.durationSeconds*0.25));
-        if(first==null)return null;
-        if(info.durationSeconds<=5)return first;
-        PresetEngine.Crop second=detectBarsSample(uri,info,Math.max(0,info.durationSeconds*0.70));
-        if(second==null)return null;
-        if(Math.abs(first.w-second.w)>16||Math.abs(first.h-second.h)>16||
-           Math.abs(first.x-second.x)>16||Math.abs(first.y-second.y)>16)return null;
-        return first;
-    }
-
-    private PresetEngine.Crop detectBarsSample(Uri uri,PresetEngine.SourceInfo info,double at){
-        try{
-            String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
-            FFmpegSession session=FFmpegKit.execute("-hide_banner -ss "+fmt(at)+" -i "+q(saf)+
-                " -frames:v 25 -vf cropdetect=limit=24:round=16:reset=0 -an -f null -");
-            if(!ReturnCode.isSuccess(session.getReturnCode()))return null;
-            String all=session.getAllLogsAsString();
-            if(all==null)return null;
-            Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(all);
-            LinkedHashMap<String,Integer> votes=new LinkedHashMap<>();
-            int total=0;
-            while(m.find()){
-                String key=m.group(1)+":"+m.group(2)+":"+m.group(3)+":"+m.group(4);
-                votes.put(key,votes.getOrDefault(key,0)+1);total++;
-            }
-            String best=null;int most=0;
-            for(Map.Entry<String,Integer> x:votes.entrySet())if(x.getValue()>most){best=x.getKey();most=x.getValue();}
-            if(best==null||most<Math.max(5,(int)Math.ceil(total*.65)))return null;
-            String[] p=best.split(":");
-            PresetEngine.Crop result=new PresetEngine.Crop(Integer.parseInt(p[0]),Integer.parseInt(p[1]),Integer.parseInt(p[2]),Integer.parseInt(p[3]));
-            return PresetEngine.isMeaningfulCrop(info,result)?result:null;
-        }catch(Exception ignored){return null;}
     }
 
     private boolean verify(File stage,boolean image,double expected){

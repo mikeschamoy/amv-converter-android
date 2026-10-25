@@ -45,6 +45,8 @@ public final class PresetEngine {
         public FrameMode frameMode=FrameMode.AUTO;
         public int pictureWidth,pictureHeight,requestedHeight;
         public double horizontalCropPercent;
+        public boolean visiblePictureVerified;
+        public String frameAnalysis="Picture content not scanned";
     }
 
     private PresetEngine(){}
