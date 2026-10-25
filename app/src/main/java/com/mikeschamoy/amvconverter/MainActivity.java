@@ -111,6 +111,12 @@ public class MainActivity extends Activity {
             String telemetry=i.getStringExtra("telemetry");
             if(telemetry!=null)telemetryText.setText(telemetry);
             boolean done=i.getBooleanExtra("done",false);
+            if(!done){
+                int w=i.getIntExtra("pictureWidth",0),h=i.getIntExtra("pictureHeight",0);
+                String name=i.getStringExtra("pictureName");
+                if(w>0&&h>0)showEncodingPicture(w,h,name);
+                else showPictureScanning();
+            }
             if(done){
                 conversionActive=false;
                 convertButton.setEnabled(inputUri!=null&&source!=null&&queuePanel.getVisibility()!=View.VISIBLE);
@@ -123,9 +129,35 @@ public class MainActivity extends Activity {
             }
             stateBadge.setText(done?(getSharedPreferences("state",MODE_PRIVATE)
                 .getInt("pausedRemaining",0)>0?"PAUSED":"READY"):"CONVERTING");
-            if(done){loadHistory();loadLastResult();refreshPauseControls();}
+            if(done){showLastPicture();loadHistory();loadLastResult();refreshPauseControls();}
         }
     };
+
+    // Display the exact resolved encode size, never the permitted height range.
+    private void showEncodingPicture(int width,int height,String name){
+        String shortName=(name==null||name.isEmpty())?"Current video":name;
+        String detail="Actual picture: "+width+"×"+height+" • "+height+"px high";
+        autoSummaryText.setText("ENCODING • "+shortName+"\n"+detail);
+        if(queuePanel.getVisibility()==View.VISIBLE)
+            queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\n"+shortName+"\n"+detail);
+    }
+    private void showPictureScanning(){
+        autoSummaryText.setText("SCANNING VIDEO\nChecking picture framing before conversion…");
+        if(queuePanel.getVisibility()==View.VISIBLE)
+            queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\nScanning current video for exact picture size…");
+    }
+    private void showLastPicture(){
+        String report=getSharedPreferences("state",MODE_PRIVATE).getString("lastResult","");
+        String last="";
+        for(String line:report.split("\n")){
+            if(line.startsWith("Last picture: ")){last=line.substring("Last picture: ".length());break;}
+        }
+        String label=last.isEmpty()?"CONVERSION FINISHED\nSee the summary below":
+            "LAST SAVED PICTURE\n"+last;
+        autoSummaryText.setText(label);
+        if(queuePanel.getVisibility()==View.VISIBLE)
+            queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\n"+label);
+    }
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
@@ -483,7 +515,8 @@ public class MainActivity extends Activity {
             // Queue is inspected for metadata only. Black-bar detection is done later
             // per file in ConversionService, so this is not the final picture size.
             meta=info.width+"×"+info.height+" • "+String.format(Locale.US,"%.3f",info.fps)+
-                " fps • preview "+rec.pictureHeight+"px • final picture 184–216px after scan";
+                " fps • estimated picture "+rec.pictureWidth+"×"+rec.pictureHeight+
+                " • exact size appears when encoding";
         }
         boolean odd=first!=null&&info!=null&&(Math.abs(first.ratio()-info.ratio())>0.08||Math.abs(first.fps-info.fps)>3.0);
         b.setText((index+1)+". "+name+"\n"+meta+(odd?"  ⚠ differs":""));
@@ -797,11 +830,11 @@ public class MainActivity extends Activity {
         if(source==null)return; PresetEngine.Preset p=preset();
         reasonText.setText(PresetEngine.explain(source,effectiveType(source,inputUri),p)+
             " • X64 calibrated • picture "+p.pictureWidth+"×"+p.pictureHeight+
-            (autoBarsCheck.isChecked()&&crop==null&&!source.image?" pre-scan estimate; final picture height 184–216px":" picture height guarded 184–216px")+
+            (autoBarsCheck.isChecked()&&crop==null&&!source.image?" (estimated before scan)":" (selected)")+
             " • 320×240 AMV");
         outputNameText.setText("OUTPUT\n"+FileNameCleaner.clean(displayName(inputUri),effectiveType(source,inputUri),source.image));
         autoSummaryText.setText((typeAuto?"AUTO SELECTION":"CUSTOM SETTINGS")+"  •  "+effectiveType(source,inputUri).name().replace('_',' ')+
-            "\nPicture height 184–216px • "+p.outputFps+" fps • "+
+            "\nEstimated picture: "+p.pictureWidth+"×"+p.pictureHeight+" • "+p.outputFps+" fps • "+
             (pictureMode==PresetEngine.PictureMode.AUTO?"picture Auto":pictureMode.name())+
             "\nOutput: "+FileNameCleaner.displayBase(displayName(inputUri),effectiveType(source,inputUri),source.image));
         presetText.setText("Preset Engine "+PresetEngine.PRESET_VERSION+"\n"+p.name+"\n"+p.filter+(p.q>0?"\nq="+p.q:""));
@@ -840,7 +873,7 @@ public class MainActivity extends Activity {
             out+=PresetEngine.estimateBytes(info,p,info.durationSeconds);
         }}
         queueHeader.setText("QUEUE • "+queueUris.size()+" FILES\nInput "+human(in)+" • Est. "+human((long)(out*.90))+"–"+human((long)(out*1.10))+" • "+(queueAuto?"Auto each file":"Same settings")+
-                "\nPicture height is always 184–216px; final size is chosen after scanning each video.");
+                "\nExact picture size appears once each video is scanned for encoding.");
     }
 
     private void style(){
@@ -938,7 +971,8 @@ public class MainActivity extends Activity {
         pauseQueueButton.setVisibility(i.hasExtra(ConversionService.EXTRA_INPUTS)||ConversionService.ACTION_RESUME.equals(i.getAction())?View.VISIBLE:View.GONE);
         resumeQueueButton.setVisibility(View.GONE);discardQueueButton.setVisibility(View.GONE);
         telemetryText.setText("CPU: "+(performanceMode==2?"Maximum":performanceMode==1?"Faster":"Standard")+" • Checking thermal/battery…");
-        statusText.setText("Conversion started. Safe to leave app or turn screen off.");
+        showPictureScanning();
+        statusText.setText("Conversion started. Exact picture size will appear after scanning.");
     }
     private void setSubtitles(int newMode){
         if(conversionActive)return;
@@ -999,7 +1033,7 @@ public class MainActivity extends Activity {
     private void resetDefaults(){typeAuto=true;type=PresetEngine.Type.YOUTUBE;mode=PresetEngine.Mode.STANDARD;heightOverride=0;fpsOverride=0;preserve43=false;crop=null;portraitMode=PresetEngine.PortraitMode.FIT;playerView=true;frameMode=PresetEngine.FrameMode.AUTO;pictureMode=PresetEngine.PictureMode.AUTO;subtitleMode=SubtitleSupport.OFF;subtitleSize=SubtitleSupport.LARGE;autoBarsCheck.setChecked(true);getSharedPreferences("state",MODE_PRIVATE).edit().putInt("picture",0).apply();queueAuto=true;setPerformance(0);refresh();}
 
     private String sourceBlock(PresetEngine.SourceInfo s){return "SOURCE\n"+s.width+"×"+s.height+"\n"+String.format(Locale.US,"%.3f fps",s.fps)+"\n"+String.format(Locale.US,"%.2f:1",s.ratio())+"\n"+(s.image?"IMAGE":fmtTime(s.durationSeconds))+"\nInput: "+human(s.inputBytes);}
-    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.7.0 final source\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+effectiveType(source,inputUri)+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\nSubtitles: "+subtitleMode+" size "+subtitleSize+"\nAuto bars: "+autoBarsCheck.isChecked()+
+    private String diagnostics(PresetEngine.Preset p){return "ClipAMV v0.7.2\nPreset Engine "+PresetEngine.PRESET_VERSION+"\nDevice: "+Build.MANUFACTURER+" "+Build.MODEL+"\nAndroid: "+Build.VERSION.RELEASE+"\nSource: "+(source==null?"-":source.width+"x"+source.height+" "+source.fps+"fps "+source.videoCodec+" / "+source.audioCodec)+"\nType: "+effectiveType(source,inputUri)+"\nMode: "+mode+"\nPreset: "+p.name+"\nFilter: "+p.filter+"\nFPS: "+p.outputFps+"\nQ: "+p.q+"\nSubtitles: "+subtitleMode+" size "+subtitleSize+"\nAuto bars: "+autoBarsCheck.isChecked()+
         "\nNative last encode: "+String.format(Locale.US,"%.2fx",getSharedPreferences("state",MODE_PRIVATE).getFloat("lastEncodeSpeed",0))+
         " ("+getSharedPreferences("state",MODE_PRIVATE).getLong("lastEncodeWallMs",0)+" ms encoder only)"+
         "\nLast encoded filter: "+getSharedPreferences("state",MODE_PRIVATE).getString("lastEncodeFilter","-")+
@@ -1046,7 +1080,14 @@ public class MainActivity extends Activity {
             if(preview.isPlaying())preview.toggle();
             previewAutoplayWhenReady=false;
         }
-        IntentFilter f=new IntentFilter(ConversionService.ACTION_PROGRESS);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);loadHistory();loadLastResult();refreshPauseControls();}
+        IntentFilter f=new IntentFilter(ConversionService.ACTION_PROGRESS);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);
+        if(conversionActive){
+            android.content.SharedPreferences state=getSharedPreferences("state",MODE_PRIVATE);
+            int w=state.getInt("activePictureWidth",0),h=state.getInt("activePictureHeight",0);
+            if(w>0&&h>0)showEncodingPicture(w,h,state.getString("activePictureName",""));
+            else showPictureScanning();
+        }
+        loadHistory();loadLastResult();refreshPauseControls();}
     @Override protected void onStop(){try{unregisterReceiver(receiver);}catch(Exception ignored){}super.onStop();}
     @Override protected void onDestroy(){
         // Async preview and inspection callbacks must not update a destroyed Activity.

@@ -43,6 +43,9 @@ public class ConversionService extends Service {
     private volatile long currentSessionId=-1;
     private volatile int lastAuxiliaryStartId=0;
     private volatile int performanceMode=0;
+    // Exact dimensions from the resolved preset after detecting bars for each file.
+    private volatile int activePictureWidth=0,activePictureHeight=0;
+    private volatile String activePictureName="";
     private volatile long lastProgressUpdateMs=0;
     private String lastFailureReason="";
     private PowerManager.WakeLock wakeLock;
@@ -94,6 +97,7 @@ public class ConversionService extends Service {
             (intent.getStringArrayListExtra(EXTRA_INPUTS)!=null&&intent.getStringArrayListExtra(EXTRA_INPUTS).size()>1);
         performanceMode=Math.max(0,Math.min(2,intent.getIntExtra(EXTRA_PERFORMANCE,0)));
         lastProgressUpdateMs=0;
+        clearActivePicture();
 
         getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",true).putBoolean("activeQueue",activeQueue).apply();
         final Intent jobIntent=intent;
@@ -112,6 +116,7 @@ public class ConversionService extends Service {
     }
 
     private void finishJob(int startId,String title,String msg,int finalPercent){
+        clearActivePicture();
         getSharedPreferences("state",MODE_PRIVATE).edit().putBoolean("jobActive",false).apply();
         working=false;
         releaseWake();
@@ -153,13 +158,14 @@ public class ConversionService extends Service {
         int subtitleSize=Math.max(0,Math.min(1,intent.getIntExtra(EXTRA_SUBTITLE_SIZE,SubtitleSupport.LARGE)));
 
         int total=inputs.size(),fail=0,completed=0,processed=0,imagesCompleted=0;
-        String lastName=""; long lastBytes=0,totalBytes=0;
+        String lastName="",lastSavedPicture=""; int lastSavedHeight=0; long lastBytes=0,totalBytes=0;
         for(int i=0;i<total&&QueuePausePolicy.shouldStart(i,cancelRequested,pauseRequested);i++){
             processed=i+1;
             lastFailureReason="";
             Uri in=Uri.parse(inputs.get(i));
             String original=displayName(in);
-            update(i,total,0,0,0,"Inspecting "+original,false);
+            clearActivePicture();
+            update(i,total,0,0,0,"Scanning "+original+" • calculating exact picture size",false);
 
             PresetEngine.SourceInfo info=inspect(in);
             if(info==null){fail++;lastFailureReason="Could not inspect "+original;
@@ -180,6 +186,9 @@ public class ConversionService extends Service {
             PresetEngine.Preset preset=PresetEngine.choose(info,itemType,mode,itemHeight,itemFps,preserve43,portrait,crop,frame,processing);
 
             String outName=FileNameCleaner.clean(original,itemType,info.image);
+            setActivePicture(preset,outName.replaceFirst("(?i)\\.(amv|jpg)$",""));
+            update(i,total,0,0,0,"Actual picture: "+preset.pictureWidth+"×"+preset.pictureHeight+
+                " ("+preset.pictureHeight+"px high) • "+outName,false);
             // Never expose an empty AMV in Downloads while it is still encoding.
             // ACTION_CREATE_DOCUMENT has already created a destination; don't delete it on failure.
             final boolean chosenDocument=total==1&&singleOut!=null;
@@ -241,6 +250,7 @@ public class ConversionService extends Service {
                 long bytes=copyToOutput(stage,out);
                 if(downloads&&!chosenDocument)publishDownload(out);
                 completed++;if(info.image)imagesCompleted++;lastName=displayName(out);lastBytes=bytes;totalBytes+=bytes;
+                lastSavedPicture=preset.pictureWidth+"×"+preset.pictureHeight;lastSavedHeight=preset.pictureHeight;
                 addHistory("✓ "+outName+" — "+human(bytes)+
                     " • full structure/seek checks passed");
             }catch(Exception e){
@@ -288,7 +298,9 @@ public class ConversionService extends Service {
             "\nFiles: "+completed+" of "+total+" saved"+(fail>0?" • "+fail+" failed":"")+
             (paused?"\nRemaining: "+(total-processed)+" • Resume from the app":"")+
             "\nElapsed: "+eta(Math.max(0,(SystemClock.elapsedRealtime()-jobStartMs)/1000))+
-            (completed>0?"\nLast: "+display+" • "+human(lastBytes)+"\nTotal: "+human(totalBytes):"")+
+            (completed>0?"\nLast: "+display+" • "+human(lastBytes)+"\nLast picture: "+lastSavedPicture+
+                " ("+lastSavedHeight+"px high)"+
+                "\nTotal: "+human(totalBytes):"")+
             "\nSaved to: "+destination+
             (completed>0?"\nChecks: "+(imagesCompleted==completed?"Image format validated":imagesCompleted>0?"AMV structure/seek and image format validated":"AMV structure and seek verified before publishing"):"")+
             (fail>0?"\nIssue: "+lastFailureReason:"");
@@ -695,6 +707,21 @@ public class ConversionService extends Service {
         return name;
     }
 
+    private void setActivePicture(PresetEngine.Preset preset,String name){
+        activePictureWidth=preset.pictureWidth;
+        activePictureHeight=preset.pictureHeight;
+        activePictureName=name;
+        getSharedPreferences("state",MODE_PRIVATE).edit()
+            .putInt("activePictureWidth",activePictureWidth)
+            .putInt("activePictureHeight",activePictureHeight)
+            .putString("activePictureName",activePictureName).apply();
+    }
+    private void clearActivePicture(){
+        activePictureWidth=0;activePictureHeight=0;activePictureName="";
+        getSharedPreferences("state",MODE_PRIVATE).edit()
+            .remove("activePictureWidth").remove("activePictureHeight")
+            .remove("activePictureName").apply();
+    }
     private void update(int index,int total,int pct,double speed,long eta,String label,boolean done){
         int overall=total<=0?pct:(int)Math.min(100,((index+pct/100.0)/total)*100);
         String msg=done?label:label+" • "+pct+"%"+(speed>0?" • "+String.format(Locale.US,"%.1fx",speed):"")+(eta>0?" • "+eta(eta)+" left":"");
@@ -703,7 +730,9 @@ public class ConversionService extends Service {
                 " • CPU: "+performanceLabel()+" • Thermal: "+thermalLabel()+" • Battery: "+batteryLabel();
         Intent i=new Intent(ACTION_PROGRESS);i.setPackage(getPackageName());
         i.putExtra("pct",pct);i.putExtra("overall",overall);i.putExtra("msg",msg);i.putExtra("done",done);
-        i.putExtra("telemetry",tele);i.putExtra("isQueue",activeQueue);i.putExtra("pauseRequested",pauseRequested);sendBroadcast(i);
+        i.putExtra("telemetry",tele);i.putExtra("isQueue",activeQueue);i.putExtra("pauseRequested",pauseRequested);
+        i.putExtra("pictureWidth",activePictureWidth);i.putExtra("pictureHeight",activePictureHeight);
+        i.putExtra("pictureName",activePictureName);sendBroadcast(i);
     }
 
     private void startFg(String msg,int pct){
