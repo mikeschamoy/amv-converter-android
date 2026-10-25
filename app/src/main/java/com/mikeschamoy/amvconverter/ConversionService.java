@@ -184,6 +184,19 @@ public class ConversionService extends Service {
                 processing=result.mode;
             }
             PresetEngine.Preset preset=PresetEngine.choose(info,itemType,mode,itemHeight,itemFps,preserve43,portrait,crop,frame,processing);
+            // The 184..216 mathematical clamp does not remove bars already
+            // painted inside the source. Check actual filtered frames BEFORE
+            // spending an hour encoding or publishing another undersized AMV.
+            if(!info.image){
+                PresetEngine.Preset safe=verifyVisiblePicture(in,info,itemType,mode,itemHeight,itemFps,
+                    preserve43,portrait,crop,frame,processing,preset,start,end,test);
+                if(safe==null){
+                    fail++;
+                    addHistory("✕ "+original+" — actual picture-height guard failed");
+                    continue;
+                }
+                preset=safe;
+            }
 
             String outName=FileNameCleaner.clean(original,itemType,info.image);
             setActivePicture(preset,outName.replaceFirst("(?i)\\.(amv|jpg)$",""));
@@ -523,6 +536,98 @@ public class ConversionService extends Service {
             s.inputBytes=querySize(uri);
             return s;
         }catch(Exception e){return null;}
+    }
+
+    /**
+     * Observe the actual filtered 320x240 picture, not just preset dimensions.
+     * A 216px filter can still show only 164px when the source has baked-in
+     * black bars. Repair a stable crop at full source resolution when safe.
+     * If a clearly undersized picture cannot be repaired, fail before encode.
+     */
+    private PresetEngine.Preset verifyVisiblePicture(Uri uri, PresetEngine.SourceInfo info,
+            PresetEngine.Type type, PresetEngine.Mode mode,int height,int fps,
+            boolean preserve43, PresetEngine.PortraitMode portrait, PresetEngine.Crop crop,
+            PresetEngine.FrameMode frame, PresetEngine.PictureMode processing,
+            PresetEngine.Preset preset,double start,double end,boolean test){
+        double begin=Math.max(0,start);
+        double available=info.durationSeconds>0?Math.max(0,info.durationSeconds-begin):0;
+        double span=test?(available>0?Math.min(30,available):30):
+                 (end>begin&&end>0?end-begin:available);
+        // Three independent portions of this file reduce the chance that a
+        // dark/letterboxed opening frame masquerades as the entire movie.
+        // The guard must NEVER treat failed probes as verified picture height.
+        double[] positions={0.18,0.48,0.78};
+        PresetEngine.Crop[] samples=new PresetEngine.Crop[positions.length];
+        for(int n=0;n<positions.length;n++)
+            samples[n]=detectRenderedSample(uri,preset,begin+Math.max(0,span)*positions[n]);
+        int verdict=PictureContentGuard.evaluate(samples);
+        if(verdict==PictureContentGuard.ACCEPT)return preset;
+        if(verdict!=PictureContentGuard.REPAIR){
+            lastFailureReason="Could not verify a consistent visible picture of at least 184px " +
+                "at multiple points in this video. No AMV was created; " +
+                "try another source or a manual crop.";
+            recordFailure(lastFailureReason);
+            return null;
+        }
+        PresetEngine.Crop anchor=null;
+        for(PresetEngine.Crop c:samples)if(PictureContentGuard.undersized(c)){
+            anchor=c;break;
+        }
+        PresetEngine.Crop fixed=PictureContentGuard.sourceCrop(info,preset,anchor);
+        if(fixed==null){
+            lastFailureReason="Visible picture is only "+anchor.h+
+                "px tall; automatic black-bar correction cannot safely restore it.";
+            recordFailure(lastFailureReason);
+            return null;
+        }
+        PresetEngine.Preset adjusted=PresetEngine.choose(info,type,mode,height,fps,
+                preserve43,portrait,fixed,frame,processing);
+        PresetEngine.Crop[] after=new PresetEngine.Crop[positions.length];
+        for(int n=0;n<positions.length;n++)
+            after[n]=detectRenderedSample(uri,adjusted,begin+Math.max(0,span)*positions[n]);
+        if(PictureContentGuard.evaluate(after)!=PictureContentGuard.ACCEPT){
+            lastFailureReason="Black-bar correction could not verify the 184px minimum " +
+                "at multiple points. No undersized video was saved.";
+            recordFailure(lastFailureReason);
+            return null;
+        }
+        android.util.Log.i("ClipAMV","Visible picture repaired "+anchor.w+"x"+anchor.h+
+                " to "+adjusted.pictureWidth+"x"+adjusted.pictureHeight+
+                " (confirmed in rendered samples) using "+fixed);
+        return adjusted;
+    }
+
+    private PresetEngine.Crop detectRenderedSample(Uri uri,PresetEngine.Preset preset,double at){
+        try{
+            String saf=FFmpegKitConfig.getSafParameterForRead(this,uri);
+            String vf=preset.filter+",cropdetect=limit=24:round=2:reset=0";
+            FFmpegSession session=FFmpegKit.execute("-hide_banner -ss "+fmt(Math.max(0,at))+" -i "+q(saf)+
+                    " -frames:v 32 -vf "+q(vf)+" -an -f null -");
+            if(!ReturnCode.isSuccess(session.getReturnCode()))return null;
+            String logs=session.getAllLogsAsString();
+            if(logs==null)return null;
+            Matcher m=Pattern.compile("crop=(\\d+):(\\d+):(\\d+):(\\d+)").matcher(logs);
+            LinkedHashMap<String,Integer> votes=new LinkedHashMap<>();
+            int total=0;
+            while(m.find()){
+                int w=Integer.parseInt(m.group(1)),h=Integer.parseInt(m.group(2));
+                int x=Integer.parseInt(m.group(3)),y=Integer.parseInt(m.group(4));
+                if(w<=0||h<=0||x<0||y<0||x+w>320||y+h>240)continue;
+                String key=w+":"+h+":"+x+":"+y;
+                votes.put(key,votes.getOrDefault(key,0)+1);total++;
+            }
+            String best=null;int most=0;
+            for(Map.Entry<String,Integer> v:votes.entrySet())if(v.getValue()>most){
+                best=v.getKey();most=v.getValue();
+            }
+            if(best==null||most<Math.max(5,(int)Math.ceil(total*0.60)))return null;
+            String[] c=best.split(":");
+            return new PresetEngine.Crop(Integer.parseInt(c[0]),Integer.parseInt(c[1]),
+                    Integer.parseInt(c[2]),Integer.parseInt(c[3]));
+        }catch(Exception error){
+            android.util.Log.w("ClipAMV","Visible-picture probe unavailable",error);
+            return null;
+        }
     }
 
     private PresetEngine.Crop detectBars(Uri uri,PresetEngine.SourceInfo info){
