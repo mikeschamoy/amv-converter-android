@@ -59,20 +59,25 @@ public final class PresetEngineRegression {
                 PresetEngine.Mode.STANDARD,0,0,false,PresetEngine.PortraitMode.FIT,
                 new PresetEngine.Crop(1920,832,0,124),PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
         check(crystalBeforeScan.pictureHeight==216,"pre-scan full-screen estimate changed");
-        check(crystalAfterScan.pictureHeight==216,"Crystal Lake Auto must remain fixed 216px after letterbox detection: "+crystalAfterScan.pictureHeight);
-        check(crystalAfterScan.filter.contains("crop=256:216:"),
-                "encoded crop must use actual 184px target");
+        check(crystalAfterScan.pictureHeight==184,"Content-aware Auto should pick 184px for effective 2.31:1: "+crystalAfterScan.pictureHeight);
+        check(crystalAfterScan.filter.contains("crop=256:184:"),
+                "encoded crop must use selected 184px target");
         check(crystalAfterScan.filter.contains("crop=1920:832:0:124"),
                 "detected source letterbox crop must be retained");
-        // Auto 16:9 movies must not inherit detected-crop cinema BALANCED or
-        // shrink the frame. The same engine serves individual files and queues.
-        check(crystalAfterScan.frameMode==PresetEngine.FrameMode.FILL,"16:9 movie must fill 216");
+        // A 16:9 *container* with 2.31:1 content must not be forced to 216.
+        check(crystalAfterScan.frameMode==PresetEngine.FrameMode.BALANCED,"effective ultrawide content should choose BALANCED");
         check(crystalAfterScan.pictureWidth==256,"16:9 movie must fill Gen2 viewport");
         PresetEngine.Preset movie192=PresetEngine.choose(crystal,PresetEngine.Type.MOVIE_SHOW,
                 PresetEngine.Mode.STANDARD,192,25,false,PresetEngine.PortraitMode.FIT,
                 new PresetEngine.Crop(1920,832,0,124),PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
-        check(movie192.pictureHeight>=184&&movie192.pictureHeight<=216,"manual 192 outside allowed bounds");
+        check(movie192.pictureHeight==192,"manual 192 ignored");
         check(movie192.requestedHeight==192,"manual height override ignored");
+        check(PresetEngine.autoContentHeight(1.78)==216,"16:9 should use 216");
+        check(PresetEngine.autoContentHeight(1.92)==208,"1.92:1 should use 208");
+        check(PresetEngine.autoContentHeight(2.08)==200,"2.08:1 should use 200");
+        check(PresetEngine.autoContentHeight(2.22)==192,"2.22:1 should use 192");
+        check(PresetEngine.autoContentHeight(2.39)==184,"2.39:1 should use 184");
+        check(PresetEngine.autoContentHeight(Double.NaN)==216,"invalid ratio fallback");
         // Even older explicit overrides outside the range are clamped.
         PresetEngine.Preset low=PresetEngine.choose(crystal,PresetEngine.Type.MOVIE_SHOW,
                 PresetEngine.Mode.STANDARD,144,25,false,PresetEngine.PortraitMode.FIT,null,

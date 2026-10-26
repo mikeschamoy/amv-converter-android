@@ -21,5 +21,5 @@ ffmpeg -nostdin -hide_banner -loglevel info -ss 0.5 -i "$T/actual.amv" \
   -vf 'cropdetect=limit=24:round=2:reset=0' -frames:v 20 -an -f null - >"$T/decoded.log" 2>&1
 CROP="$(grep 'crop=' "$T/decoded.log"|tail -1|sed -E 's/.*crop=([0-9]+:[0-9]+:[0-9]+:[0-9]+).*/\1/')"
 echo "Actual AMV encoded and decoded picture: $CROP"
-[ "$CROP" = '256:216:64:12' ]
-echo 'PASS: real AMV file encodes and decodes to full 256x216 picture at X64'
+[ "$CROP" = '256:192:64:24' ]
+echo 'PASS: real AMV file encodes and decodes to full 256x192 picture at X64'

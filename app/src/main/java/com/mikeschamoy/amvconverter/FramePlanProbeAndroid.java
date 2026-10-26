@@ -7,8 +7,6 @@ import com.arthenica.ffmpegkit.FFmpegKitConfig;
 import com.arthenica.ffmpegkit.FFmpegSession;
 import com.arthenica.ffmpegkit.ReturnCode;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,14 +27,24 @@ public final class FramePlanProbeAndroid implements FramePlanResolver.Probe {
     @Override public PresetEngine.Crop sourceAt(double seconds){
         ArrayList<PresetEngine.Crop> all=run(seconds,"cropdetect=limit=24:round=16:reset=0",25);
         if(all.isEmpty())return null;
-        LinkedHashMap<String,Integer> count=new LinkedHashMap<>();
-        for(PresetEngine.Crop c:all){String k=c.w+":"+c.h+":"+c.x+":"+c.y;count.put(k,count.getOrDefault(k,0)+1);}
-        String best=null;int votes=0;
-        for(Map.Entry<String,Integer> e:count.entrySet())if(e.getValue()>votes){best=e.getKey();votes=e.getValue();}
-        if(best==null||votes<Math.max(5,(int)Math.ceil(all.size()*.65)))return null;
-        String[] p=best.split(":");
-        PresetEngine.Crop c=new PresetEngine.Crop(Integer.parseInt(p[0]),Integer.parseInt(p[1]),Integer.parseInt(p[2]),Integer.parseInt(p[3]));
-        return PresetEngine.isMeaningfulCrop(source,c)?c:null;
+        PresetEngine.Crop winner=null;int best=0;
+        for(PresetEngine.Crop c:all){
+            if(c==null || !PresetEngine.isMeaningfulCrop(source,c))continue;
+            // Letterbox/pillarbox bars normally occur on OPPOSITE edges.
+            // Reject one-sided darkness masquerading as a permanent crop.
+            int right=source.width-c.x-c.w,bottom=source.height-c.y-c.h;
+            if(Math.abs(right-c.x)>Math.max(32,source.width/30) ||
+                    Math.abs(bottom-c.y)>Math.max(32,source.height/30))continue;
+            int count=0;
+            for(PresetEngine.Crop other:all){
+                if(other!=null && Math.abs(other.w-c.w)<=16 &&
+                        Math.abs(other.h-c.h)<=16 && Math.abs(other.x-c.x)<=16 &&
+                        Math.abs(other.y-c.y)<=16)count++;
+            }
+            if(count>best){best=count;winner=c;}
+        }
+        // An unstable crop isn't a fact about a video's geometry.
+        return best>=Math.max(6,(int)Math.ceil(all.size()*.65))?winner:null;
     }
     @Override public PresetEngine.Crop renderedAt(PresetEngine.Preset preset,double seconds){
         ArrayList<PresetEngine.Crop> crops=run(seconds,preset.filter+",cropdetect=limit=24:round=2:reset=0",32);

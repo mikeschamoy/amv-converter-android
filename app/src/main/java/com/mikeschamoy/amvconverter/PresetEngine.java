@@ -2,7 +2,7 @@ package com.mikeschamoy.amvconverter;
 import java.util.Locale;
 
 public final class PresetEngine {
-    public static final String PRESET_VERSION="4.4";
+    public static final String PRESET_VERSION="4.5";
     // Hard limit for the actual image region inside the 320x240 AMV canvas.
     // This takes precedence over Auto/Fit/Fill/Balanced and height overrides.
     public static final int MIN_PICTURE_HEIGHT=184;
@@ -44,6 +44,7 @@ public final class PresetEngine {
         public Mode mode;
         public FrameMode frameMode=FrameMode.AUTO;
         public int pictureWidth,pictureHeight,requestedHeight;
+        public double effectiveAspectRatio;
         public double horizontalCropPercent;
         public boolean visiblePictureVerified;
         public String frameAnalysis="Picture content not scanned";
@@ -82,41 +83,34 @@ public final class PresetEngine {
         else if(mode==Mode.QUALITY){p.q=1;p.qmin=1;}
         if(type==Type.CARTOON&&mode!=Mode.SPACE_SAVER&&p.q<0){p.q=1;p.qmin=1;}
 
-        // Height controls limit the actual displayed content; they never force an invalid crop.
-        int h=heightOverride;
-        boolean fourThree=s.isFourThree()&&type!=Type.PORTRAIT;
-        boolean portrait=type==Type.PORTRAIT||s.isPortrait();
-        if(fourThree){if(h<=0)h=216;p.fourThree=true;p.fourThreePreserve=preserve43;}
-        else if(portrait){if(h<=0)h=216;}
-        else if(h<=0){
-            double ratio=s.ratio();
-            if(type==Type.YOUTUBE)h=208;
-            else if(type==Type.CARTOON)h=216;
-            else if(ratio<=1.82)h=216;
-            else if(ratio<=1.95)h=208;
-            else if(ratio<=2.15)h=192;
-            else h=184;
-        }
-        // A normal 16:9 Movie/Show in Auto mode ALWAYS uses the familiar
-        // 256x216 Gen2 picture. Do not let an optional letterbox crop turn
-        // this into BALANCED/184, or make queue processing differ from single-file.
-        // Respect explicit manual height / framing choices instead.
-        boolean fixedMovie216=type==Type.MOVIE_SHOW && !portrait && !fourThree
-                && framing==FrameMode.AUTO && heightOverride<=0
-                && s.ratio()>=1.70 && s.ratio()<=1.86;
-        if(fixedMovie216)h=216;
-        h=Math.max(MIN_PICTURE_HEIGHT,Math.min(MAX_PICTURE_HEIGHT,h));if(h%2!=0)h--;
-        p.requestedHeight=h;
-        // Resolve framing per source, independently of picture processing and queue mode.
+        // A file can say 1920x1080 while its visible movie occupies a
+        // substantially wider region inside embedded black bars.  Calculate
+        // the effective ratio BEFORE deciding Auto's picture height.
         double ratio=s.ratio();
         if(p.detectedCrop!=null){
             double sar=s.sampleAspect>0?s.sampleAspect:1.0;
             ratio=(double)p.detectedCrop.w*sar/p.detectedCrop.h;
             if(Math.abs(s.rotation)%180==90)ratio=1.0/ratio;
         }
+        if(!Double.isFinite(ratio)||ratio<=0)ratio=16.0/9.0;
+        int h=heightOverride;
+        boolean fourThree=s.isFourThree()&&type!=Type.PORTRAIT;
+        boolean portrait=type==Type.PORTRAIT||s.isPortrait();
+        if(fourThree){if(h<=0)h=216;p.fourThree=true;p.fourThreePreserve=preserve43;}
+        else if(portrait){if(h<=0)h=216;}
+        else if(h<=0){
+            if(type==Type.YOUTUBE && p.detectedCrop==null && ratio<=1.90)h=208;
+            else if(type==Type.CARTOON && p.detectedCrop==null && ratio<=1.90)h=216;
+            else h=autoContentHeight(ratio);
+        }
+        // Manual height always wins, including when a crop was detected.
+        // Movie/Show Auto is now CONTENT-aware, not container-ratio locked.
+        h=Math.max(MIN_PICTURE_HEIGHT,Math.min(MAX_PICTURE_HEIGHT,h));if(h%2!=0)h--;
+        p.requestedHeight=h;
+        p.effectiveAspectRatio=ratio;
         if(portrait&&portraitMode==PortraitMode.ROTATE)ratio=1.0/ratio;
         if(!Double.isFinite(ratio)||ratio<=0)ratio=16.0/9.0;
-        FrameMode chosen=fixedMovie216?FrameMode.FILL:resolveFraming(type,framing,ratio);
+        FrameMode chosen=resolveFraming(type,framing,ratio);
         // The two 4:3 controls must do what their labels say: FULL fills
         // the selected height; PRESERVE shows the complete uncropped frame.
         if(fourThree&&framing==FrameMode.AUTO)
@@ -127,7 +121,7 @@ public final class PresetEngine {
         if(portrait&&portraitMode==PortraitMode.FIT&&framing==FrameMode.AUTO){chosen=FrameMode.FIT;zoom=false;p.frameMode=chosen;}
         // BALANCED may reduce crop, but never below the user's minimum.
         int pictureH=h;
-        if(chosen==FrameMode.BALANCED && ratio>1.0){
+        if(chosen==FrameMode.BALANCED && framing==FrameMode.BALANCED && heightOverride<=0 && ratio>1.0){
             int cap=evenFloor(256.0/(ratio*0.67));
             pictureH=Math.min(h,Math.max(MIN_PICTURE_HEIGHT,cap));
         }
@@ -162,14 +156,30 @@ public final class PresetEngine {
         rescale+="pad=320:240:x='(ow-iw)/2+32':y='(oh-ih)/2':color=black,setsar=1";
         p.filter=initial+rescale;
         String label=portrait?"PORTRAIT":fourThree?"4:3":type==Type.YOUTUBE?"YT":type==Type.CARTOON?"CARTOON":"MOVIE";
-        p.name=label+" "+h+" "+(framing==FrameMode.AUTO?"AUTO→":"")+p.frameMode.name()+
-                " • picture "+p.pictureWidth+"×"+p.pictureHeight+" • "+p.outputFps+"fps";
+        String framingName=framing==FrameMode.AUTO?
+                "AUTO (content "+String.format(Locale.US,"%.2f:1",p.effectiveAspectRatio)+")":
+                p.frameMode.name();
+        p.name=label+" "+framingName+" • picture "+p.pictureWidth+"×"+p.pictureHeight+
+                " • "+p.outputFps+"fps";
         return p;
     }
     private static int evenFloor(double n){return evenFloor(240.0,n);}
     private static int evenFloor(double max,double n){
         return Math.max(2,Math.min((int)max,2*(int)Math.floor(Math.max(2,n)/2.0)));
     }
+    /** Conservative height steps for real picture aspect ratios.
+     *  Preserves the 184..216 height contract and allows ultrawide content
+     *  to retain more of its left and right sides without adding black bars.
+     */
+    public static int autoContentHeight(double ratio){
+        if(!Double.isFinite(ratio)||ratio<=0)return 216;
+        if(ratio<=1.86)return 216;
+        if(ratio<=1.98)return 208;
+        if(ratio<=2.14)return 200;
+        if(ratio<=2.30)return 192;
+        return 184;
+    }
+
     public static FrameMode resolveFraming(Type type,FrameMode requested,double ratio){
         if(requested!=FrameMode.AUTO)return requested;
         // Default to exact selected height on ordinary landscape YouTube/skate content.

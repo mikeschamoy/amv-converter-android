@@ -15,9 +15,9 @@ for WHICH in PLAIN CROPPED; do
  CROP="$(grep 'crop=' "$TMP/$WHICH.log" | tail -1 | sed -E 's/.*crop=([0-9]+:[0-9]+:[0-9]+:[0-9]+).*/\1/')"
  echo "$WHICH observed crop: $CROP"
  if [ "$WHICH" = CROPPED ];then
-  [ "$CROP" = '256:216:64:12' ] || { echo 'FAIL corrected frame not full 216';exit 1; }
+  [ "$CROP" = '256:192:64:24' ] || { echo 'FAIL corrected frame did not choose 192';exit 1; }
  else
   case "$CROP" in 256:1??:64:*) ;; *) echo 'FAIL test did not reproduce undersized picture'; exit 1;; esac
  fi
 done
-echo 'PASS actual FFmpeg 16:9 content height 216 after letterbox correction and X64 viewport'
+echo 'PASS real FFmpeg content-aware 192px after removing embedded bars, X64'

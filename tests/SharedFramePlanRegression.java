@@ -21,10 +21,10 @@ public final class SharedFramePlanRegression {
             if(!letterbox)return new PresetEngine.Crop(256,216,64,12);
             if(oneCleanSample && at>750 && at<900 && !p.filter.contains("pad=320:240:64:12:black,setsar=1")
                     && p.detectedCrop==null) return new PresetEngine.Crop(256,216,64,12);
-            if(p.filter.contains(",pad=320:240:64:12:black,setsar=1"))
-                return new PresetEngine.Crop(256,weakRepair?192:216,64,weakRepair?24:12);
+            if(p.filter.contains(",pad=320:240:64:"))
+                return new PresetEngine.Crop(256,weakRepair?180:p.pictureHeight,64,weakRepair?30:(240-p.pictureHeight)/2);
             if(p.detectedCrop!=null && p.detectedCrop.h<=300)
-                return new PresetEngine.Crop(256,weakRepair?192:216,64,weakRepair?24:12);
+                return new PresetEngine.Crop(256,weakRepair?180:p.pictureHeight,64,weakRepair?30:(240-p.pictureHeight)/2);
             return new PresetEngine.Crop(256,168,64,36);
         }
         public boolean cancelled(){return false;}
@@ -43,9 +43,9 @@ public final class SharedFramePlanRegression {
         PresetEngine.Preset a=choose(source,0,PresetEngine.FrameMode.AUTO,true,null,preview);
         PresetEngine.Preset b=choose(source,0,PresetEngine.FrameMode.AUTO,true,null,conversion);
         check(a.filter.equals(b.filter),"preview/full must have identical -vf");
-        check(a.pictureHeight==216&&a.pictureWidth==256,"216 movie preset");
-        check(a.visiblePictureVerified,"216 repair must be independently verified");
-        check(a.detectedCrop!=null && a.detectedCrop.h==280,"source-level embedded letterbox correction");
+        check(a.pictureHeight==192&&a.pictureWidth==256,"widescreen content should select 192");
+        check(a.detectedCrop!=null,"detected source crop must be retained");
+        check(a.detectedCrop.h==280,"source-level embedded letterbox correction");
         check(a.filter.contains("crop=640:280:0:40"),"correct crop must precede scale");
         check(preview.renderCalls==conversion.renderCalls,"same scan count");
         check(a.filter.contains("pad=320:240"),"320x240 remains");
@@ -65,10 +65,10 @@ public final class SharedFramePlanRegression {
            PresetEngine.choose(source,PresetEngine.Type.MOVIE_SHOW,
            PresetEngine.Mode.STANDARD,0,0,false,PresetEngine.PortraitMode.FIT,null,
            PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP).filter),
-           "192px false-positive repair must not be accepted as 216");
+           "weak correction must not be accepted");
         Fake oneDark=new Fake(true);oneDark.oneDarkSample=true;
         PresetEngine.Preset recovered=choose(source,0,PresetEngine.FrameMode.AUTO,true,null,oneDark);
-        check(recovered.visiblePictureVerified && recovered.pictureHeight==216,
+        check(recovered.visiblePictureVerified && recovered.pictureHeight==192,
            "one dark scan must not veto a consistently verified border correction");
         Fake manualProbe=new Fake(true);
         PresetEngine.Crop explicit=new PresetEngine.Crop(600,300,20,30);
@@ -81,7 +81,7 @@ public final class SharedFramePlanRegression {
           "auto-bars OFF disables hidden scans");
         Fake src=new Fake(true);src.sourceBars=true;
         PresetEngine.Preset withSource=choose(source,0,PresetEngine.FrameMode.AUTO,true,null,src);
-        check(withSource.pictureHeight==216&&withSource.detectedCrop!=null&&
+        check(withSource.pictureHeight==192&&withSource.detectedCrop!=null&&
           withSource.detectedCrop.h==280,"source border crop accepted");
         PresetEngine.Crop[] withSingleFull={new PresetEngine.Crop(256,164,64,38),
             new PresetEngine.Crop(256,162,64,38),
@@ -100,9 +100,9 @@ public final class SharedFramePlanRegression {
         PresetEngine.SourceInfo nonSquare=film();nonSquare.sampleAspect=1.03;
         Fake fallbackProbe=new Fake(true);
         PresetEngine.Preset fallback=choose(nonSquare,0,PresetEngine.FrameMode.AUTO,true,null,fallbackProbe);
-        check(fallback.filter.contains(",pad=320:240:64:12:black,setsar=1"),
+        check(fallback.filter.contains(",pad=320:240:64:28:black,setsar=1"),
           "verified output-level crop fallback when source inverse is unavailable");
-        System.out.println("PASS: shared frame plan parity, embedded bars, 216 lock, manual, dark, queue, X64");
+        System.out.println("PASS: shared frame plan parity, content ratio, manual, dark, queue, X64");
         System.out.println("CORRECTED_FILTER="+a.filter);
         System.out.println("UNCORRECTED_FILTER="+clean.filter);
         System.out.println("FALLBACK_FILTER="+fallback.filter);

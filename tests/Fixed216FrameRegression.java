@@ -14,10 +14,10 @@ public class Fixed216FrameRegression {
         new PresetEngine.Crop(640,280,0,40),
         PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
       yes(plain.pictureWidth==256&&plain.pictureHeight==216,"plain movie is not 256x216");
-      yes(cropped.pictureWidth==256&&cropped.pictureHeight==216,"cropped movie shrunk");
-      yes(cropped.frameMode==PresetEngine.FrameMode.FILL,"movie auto frame not FILL");
+      yes(cropped.pictureWidth==256&&cropped.pictureHeight==192,"2.29:1 movie should use 192");
+      yes(cropped.frameMode==PresetEngine.FrameMode.BALANCED,"effective widescreen must select balanced");
       yes(cropped.filter.contains("crop=640:280:0:40"),"black-bar removal not applied");
-      yes(cropped.filter.contains("crop=256:216"),"final crop wrong");
+      yes(cropped.filter.contains("crop=256:192"),"final 192 crop wrong");
     }
     PresetEngine.Preset a=PresetEngine.choose(src,PresetEngine.Type.MOVIE_SHOW,
       PresetEngine.Mode.STANDARD,0,0,false,PresetEngine.PortraitMode.FIT,null,
@@ -26,7 +26,7 @@ public class Fixed216FrameRegression {
       PresetEngine.Mode.STANDARD,0,0,false,PresetEngine.PortraitMode.FIT,
       new PresetEngine.Crop(640,280,0,40),
       PresetEngine.FrameMode.AUTO,PresetEngine.PictureMode.SHARP);
-    System.out.println("PASS fixed 216 geometry across Standard/Quality/Space Saver and border crops");
+    System.out.println("PASS content-aware 216 clean and 192 ultrawide across all quality modes");
     System.out.println("FILTER_PLAIN="+a.filter);
     System.out.println("FILTER_CROPPED="+b.filter);
   }
