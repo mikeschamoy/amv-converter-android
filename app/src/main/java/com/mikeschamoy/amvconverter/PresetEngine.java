@@ -195,6 +195,15 @@ public final class PresetEngine {
         return buildVideoCommand(in,out,p,start,end,test,0);
     }
     public static String buildVideoCommand(String in,String out,Preset p,double start,double end,boolean test,int performance){
+        return buildVideoCommand(in,out,p,start,end,test,performance,0);
+    }
+    /**
+     * Bound every known-duration encode to the inspected source runtime.
+     * Irregular VFR timestamps must not create extra AMV frames past EOF.
+     * The existing AMV structural/trailer/duration audit remains mandatory.
+     */
+    public static String buildVideoCommand(String in,String out,Preset p,double start,double end,
+                                           boolean test,int performance,double boundedDurationSeconds){
         StringBuilder c=new StringBuilder("-y -fflags +genpts ");
         // Standard/Faster intentionally preserve the same filter-thread defaults as
         // a direct Termux FFmpeg command. Forcing two filter threads on some Android
@@ -205,7 +214,11 @@ public final class PresetEngine {
         if(start>0)c.append("-ss ").append(fmt(start)).append(" ");
         c.append("-i ").append(q(in)).append(" ");
         if(!p.audioPresent)c.append("-f lavfi -i anullsrc=r=22050:cl=mono ");
-        if(test)c.append("-t 30 ");
+        // Output -t limits BOTH AMV video frames and interleaved audio,
+        // including full-length movies without manual trimming.
+        if(Double.isFinite(boundedDurationSeconds)&&boundedDurationSeconds>0)
+            c.append("-t ").append(fmt(Math.max(0.001,boundedDurationSeconds))).append(" ");
+        else if(test)c.append("-t 30 ");
         else if(end>start&&end>0)c.append("-t ").append(fmt(end-start)).append(" ");
         c.append("-vf ").append(q(p.filter)).append(" -map 0:v:0 ");
         c.append(p.audioPresent?"-map 0:a:0? ":"-map 1:a:0 -shortest ");

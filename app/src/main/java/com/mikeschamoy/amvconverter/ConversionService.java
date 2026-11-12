@@ -348,7 +348,7 @@ public class ConversionService extends Service {
             encodePreset.audioPresent=preset.audioPresent;
         }
         String cmd=info.image?PresetEngine.buildImageCommand(inSaf,stage.getAbsolutePath(),preset):
-            PresetEngine.buildVideoCommand(inSaf,stage.getAbsolutePath(),encodePreset,start,end,test,performanceMode);
+            PresetEngine.buildVideoCommand(inSaf,stage.getAbsolutePath(),encodePreset,start,end,test,performanceMode,runtime);
         CountDownLatch latch=new CountDownLatch(1);
         final long encoderStartMs=SystemClock.elapsedRealtime();
         final AtomicLong encodedPositionMs=new AtomicLong(0);
