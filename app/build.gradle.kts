@@ -8,8 +8,8 @@ android {
         minSdk = 26
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 26
-        versionName = "0.7.8"
+        versionCode = 27
+        versionName = "0.7.9"
     }
     buildTypes {
         release {
@@ -25,4 +25,4 @@ android {
 dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.9") }
+    implementation("com.github.leventyayla:ffmpeg-kit:v6.0-4-morph-full-16kb") }

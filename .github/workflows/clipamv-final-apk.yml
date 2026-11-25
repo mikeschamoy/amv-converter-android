@@ -19,6 +19,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - name: Reuse consistent ClipAMV debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: clipamv-universal-debug-keystore-v1
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
       - name: Install Android 35
@@ -29,6 +34,26 @@ jobs:
           gradle-version: "8.9"
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
+      - name: Verify 32-bit ARM and 64-bit ARM conversion engines in APK
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -Z1 "$APK" > "$RUNNER_TEMP/clipamv-apk-entries.txt"
+          for abi in armeabi-v7a arm64-v8a; do
+            name="lib/$abi/libffmpegkit.so"
+            if ! grep -Fxq "$name" "$RUNNER_TEMP/clipamv-apk-entries.txt"; then
+              echo "ERROR: $name is missing. Refusing to upload an incompatible APK."
+              exit 1
+            fi
+            echo "PASS native engine: $name"
+          done
+          unzip -p "$APK" lib/armeabi-v7a/libffmpegkit.so > "$RUNNER_TEMP/clipamv-libffmpegkit-arm32.so"
+          if ! readelf -h "$RUNNER_TEMP/clipamv-libffmpegkit-arm32.so" | grep -Eq 'Machine:.*ARM'; then
+            echo 'ERROR: The ARM32 library is not a valid ARM ELF binary'
+            exit 1
+          fi
+          echo 'PASS: ARM32 library is genuine ARM ELF; APK includes both architectures'
       - name: Name APK ClipAMV
         run: |
           mkdir -p dist
