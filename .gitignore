@@ -3,3 +3,7 @@
 local.properties
 **/build/
 *.iml
+
+# Downloaded, checksum-pinned ARM engine
+/app/libs/ffmpeg-kit-morph-full-16kb.aar
+/app/libs/ffmpeg-kit-morph-full-16kb.aar.part

@@ -6,10 +6,13 @@ android {
     defaultConfig {
         applicationId = "com.mikeschamoy.amvconverter"
         minSdk = 26
+        if (providers.gradleProperty("clipamvArm32").orNull == "true") {
+            ndk { abiFilters += listOf("armeabi-v7a") }
+        }
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 27
-        versionName = "0.7.9"
+        versionCode = 28
+        versionName = "0.7.10"
     }
     buildTypes {
         release {
@@ -25,4 +28,5 @@ android {
 dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    implementation("com.github.leventyayla:ffmpeg-kit:v6.0-4-morph-full-16kb") }
+    implementation(files("libs/ffmpeg-kit-morph-full-16kb.aar"))
+    implementation("com.arthenica:smart-exception-java:0.2.1") }
